@@ -3,10 +3,16 @@ mod tests {
     use jsonschema::JSONSchema;
     use serde_json::json;
     use std::fs;
+    use std::env;
 
     fn load_schema() -> serde_json::Value {
-        //-- the test schema is referenced from where the test is run --/
-        let schema_content = fs::read_to_string("tests/cpm_if_schema_v1.3.json").expect("Failed to read schema file");
+        let args: Vec<String> = env::args().collect();
+        let schema_path = if args.len() > 1 {
+            &args[1]
+        } else {
+            "tests/cpm_if_schema_v1.3.json"
+        };
+        let schema_content = fs::read_to_string(schema_path).expect("Failed to read schema file");
         serde_json::from_str(&schema_content).expect("Invalid JSON schema format")
     }
 
@@ -44,37 +50,40 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_privileges() {
+    fn test_missing_required_fields() {
         let schema = JSONSchema::compile(&load_schema()).expect("Failed to compile schema");
-        let valid_data = json!({
-            "object_map": [],
+        let invalid_data = json!({
             "subject_map": [],
-            "privileges": [{
-                "principal": {
-                    "subject": "SubjectDomain1",
-                    "execution_context": { "uid": "user" }
-                },
-                "can_call": ["SubjectDomain2"],
-                "can_return": [],
-                "can_read": [{ "objects": ["ObjectDomain1"] }],
-                "can_write": []
-            }]
+            "privileges": []
         });
-        assert!(schema.validate(&valid_data).is_ok(), "Valid privileges should pass");
+        assert!(schema.validate(&invalid_data).is_err(), "Missing required 'object_map' should fail");
     }
 
     #[test]
-    fn test_invalid_privileges() {
+    fn test_extra_unexpected_fields() {
+        let schema = JSONSchema::compile(&load_schema()).expect("Failed to compile schema");
+        let invalid_data = json!({
+            "object_map": [],
+            "subject_map": [],
+            "privileges": [],
+            "unexpected_field": "some_value"
+        });
+        assert!(schema.validate(&invalid_data).is_err(), "Unexpected fields should fail");
+    }
+
+    #[test]
+    fn test_invalid_privileges_format() {
         let schema = JSONSchema::compile(&load_schema()).expect("Failed to compile schema");
         let invalid_data = json!({
             "object_map": [],
             "subject_map": [],
             "privileges": [{
                 "principal": {
-                    "execution_context": { "uid": "user" }
-                }
+                    "subject": "SubjectDomain1"
+                },
+                "can_call": "SubjectDomain2"
             }]
         });
-        assert!(schema.validate(&invalid_data).is_err(), "Missing subject in principal should fail");
+        assert!(schema.validate(&invalid_data).is_err(), "Incorrect format in 'can_call' should fail");
     }
 }
