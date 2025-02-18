@@ -1,4 +1,4 @@
-# Info for the Rust build tool
+# Info for the Rust build tool: name must match Cargo.toml
 PROJECT_NAME 	:= cpm_if_yaml_validator
 BUILD_DIR 		:= target/release
 BINARY 			:= $(BUILD_DIR)/$(PROJECT_NAME)
