@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CPM Compartmentalization Format",
+  "type": "object",
+  "properties": {
+    "object_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "objects": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["name", "objects"]
+      }
+    },
+    "subject_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "subjects": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["name", "subjects"]
+      }
+    },
+    "privileges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "principal": {
+            "type": "object",
+            "properties": {
+              "subject": { "type": "string" },
+              "execution_context": {
+                "type": "object",
+                "properties": {
+                  "call_context": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "uid": { "type": "string", "enum": ["root", "user", "all"] },
+                  "gid": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": ["subject"]
+          },
+          "can_call": { "type": "array", "items": { "type": "string" } },
+          "can_return": { "type": "array", "items": { "type": "string" } },
+          "can_read": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "objects": { "type": "array", "items": { "type": "string" } },
+                "object_context": {
+                  "type": "object",
+                  "properties": {
+                    "uid": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "can_write": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "objects": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["object_map", "subject_map", "privileges"]
+}
