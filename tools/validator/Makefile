@@ -1,17 +1,27 @@
-PROJECT_NAME = CPM_IF_yaml_validator
-BUILD_DIR = target/release
-BINARY = $(BUILD_DIR)/$(PROJECT_NAME)
-SRC_DIR = src
+# Info for the Rust build tool
+PROJECT_NAME 	:= cpm_if_yaml_validator
+BUILD_DIR 		:= target/release
+BINARY 			:= $(BUILD_DIR)/$(PROJECT_NAME)
+SRC_DIR 		:= src
 
-.PHONY: all build run clean install
+# Default schema file, bump this or set the env variable
+SCHEMA 			:= ../../specification/cpm_if_schema_v1.3.json
+
+# Example file to show the IF, can be overwritten by ENV variable
+IF_FILE			:= ../../examples/linux_2.yaml
+
+.PHONY: all build run test clean install
 
 all: build
 
+example: build
+	$(BINARY) $(SCHEMA) $(IF_FILE)
+
+test: build
+	cargo test
+
 build:
 	cargo build --release
-
-run: build
-	$(BINARY) example.yaml
 
 clean:
 	cargo clean
