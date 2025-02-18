@@ -26,25 +26,39 @@ SCHEMA 			:= ../../specification/cpm_if_schema_v1.3.json
 # Example file to show the IF, can be overwritten by ENV variable
 IF_FILE			:= ../../examples/linux_2.yaml
 
-.PHONY: all build run test clean install
+.PHONY: all build run test clean install setup-rust
 
-all: build
+all: setup build test example
 
+#--- use the example file and base schema to show the validator use
 example: build
 	$(BINARY) $(SCHEMA) $(IF_FILE)
 
-test: build
-	cargo test
+#--- use automated testing framework to test
+test: setup
+	@cargo test
 
-build:
+#--- build the tool
+build: setup
 	cargo build --release
+
+#--- setup recipe for any env or dependency requirements
+setup: setup-rust
+
+#--- Install Rust if it is not installed
+setup-rust:
+	@which rustc > /dev/null 2>&1 || ( 			\
+		echo "Rust not found, installing..." 	\
+		&& curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+		)
+	@echo "Rust is installed: $$(rustc --version)"
 
 clean:
 	cargo clean
 
+#--- Install the tool into the PATH
 install: build
 	install -m 755 $(BINARY) /usr/local/bin/$(PROJECT_NAME)
 
 uninstall:
 	rm -f /usr/local/bin/$(PROJECT_NAME)
-
