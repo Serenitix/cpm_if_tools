@@ -1,8 +1,6 @@
-use serde::{Deserialize, Serialize};
-use serde_yaml;
-use std::fs;
-use std::process;
-use crate::object_identifer::ObjectIdentifier;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::object_identifer::ObjectID;
+// TODO make sure to specify yaml serialization and desserialization
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CPMPrivMap {
@@ -14,7 +12,8 @@ pub struct CPMPrivMap {
 #[derive(Debug, Deserialize, Serialize)]
 struct ObjectDomain {
     name: String,
-    objects: Vec<ObjectIdentifier>,
+    objects: Vec<String>,
+    //objects: Vec<ObjectID>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -32,40 +31,85 @@ struct Privilege {
     can_write: Option<Vec<AccessDescriptor>>,
 }
 
+/*
+ * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
+ */
 #[derive(Debug, Deserialize, Serialize)]
 struct Principal {
-    subject: String,
-    execution_context: Option<ExecutionContext>,
+    // TODO make this work correctly: point to a subject domain 
+    //   eg: subject: SubjectDomain, // but a reference to a subject domain
+    //   well the grammar specifies it like this right now. so i will be 
+    //   faithful to the grammar and propose changes after one version
+    subject: SubjectDomain,
+    #[serde(default)]
+    execution_context: OptionalContextField,
+}
+
+/*
+ * The context field is used for execution_context and subject_context fields 
+ * of the Principal and Object objects. The logic of the grammar allows for an 
+ * optional context field that is either non-existent and defaults to "all" or 
+ * as a context object. This enum allows for the either defined or all, which 
+ * then leads to custom serialization and deserialization.
+ */
+#[derive(Debug)]
+enum OptionalContextField {
+    Context(Context),
+    All,
+}
+
+/*
+ * Implement the default value for the OptionalContextField enum.
+ */
+impl Default for OptionalContextField {
+    fn default() -> Self {
+        OptionalContextField::All
+    }
+}
+
+impl<'de> Deserialize<'de> for OptionalContextField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<Context> = Option::deserialize(deserializer)?;
+        Ok(opt.map_or(OptionalContextField::All, OptionalContextField::Context))
+    }
+}
+
+impl Serialize for OptionalContextField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            OptionalContextField::Context(ctx) => ctx.serialize(serializer),
+            OptionalContextField::All => serializer.serialize_none(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ExecutionContext {
+struct Context {
     call_context: Option<Vec<String>>,
     uid: Option<String>,
     gid: Option<String>,
 }
 
+/*
+ * The AccessDescriptor struct represents access permissions for objects.
+ * 
+ * Grammar:
+ * 
+ * AccessDescriptor:
+ *   objects: [ObjectIdentifier]
+ *   object_context: ?Context
+ * 
+ * If the object_context field is omitted, it defaults to "all".
+ */
 #[derive(Debug, Deserialize, Serialize)]
 struct AccessDescriptor {
     objects: Vec<ObjectIdentifier>,
-    object_context: Option<ExecutionContext>,
-}
-
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() != 2 {
-        eprintln!("Usage: cpm_yaml_validator <file.yaml>");
-        process::exit(1);
-    }
-
-    let filename = &args[1];
-    let content = fs::read_to_string(filename).expect("Failed to read YAML file");
-    
-    match serde_yaml::from_str::<CPMPrivMap>(&content) {
-        Ok(_) => println!("{} is valid according to the CPM schema.", filename),
-        Err(e) => {
-            eprintln!("Validation error: {}", e);
-            process::exit(1);
-        }
-    }
+    #[serde(default)]
+    object_context: OptionalContextField,
 }
