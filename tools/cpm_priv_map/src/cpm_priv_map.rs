@@ -25,10 +25,18 @@ struct SubjectDomain {
 #[derive(Debug, Deserialize, Serialize)]
 struct Privilege {
     principal: Principal,
+    #[serde(default = "default_all")]
     can_call: Option<Vec<String>>,
+    #[serde(default = "default_all")]
     can_return: Option<Vec<String>>,
+    #[serde(default = "default_all")]
     can_read: Option<Vec<AccessDescriptor>>,
+    #[serde(default = "default_all")]
     can_write: Option<Vec<AccessDescriptor>>,
+}
+
+fn default_all() -> Option<Vec<String>> {
+    Some(vec!["all".to_string()])
 }
 
 /*
@@ -41,52 +49,26 @@ struct Principal {
     //   well the grammar specifies it like this right now. so i will be 
     //   faithful to the grammar and propose changes after one version
     subject: SubjectDomain,
-    #[serde(default)]
+    #[serde(default = "default_execution_context")]
     execution_context: OptionalContextField,
+}
+
+fn default_execution_context() -> OptionalContextField {
+    OptionalContextField::All
 }
 
 /*
  * The context field is used for execution_context and subject_context fields 
  * of the Principal and Object objects. The logic of the grammar allows for an 
  * optional context field that is either non-existent and defaults to "all" or 
- * as a context object. This enum allows for the either defined or all, which 
- * then leads to custom serialization and deserialization.
+ * as a context object. This enum allows for either a defined context or "all", 
+ * which then leads to simpler serialization and deserialization.
  */
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
 enum OptionalContextField {
     Context(Context),
-    All,
-}
-
-/*
- * Implement the default value for the OptionalContextField enum.
- */
-impl Default for OptionalContextField {
-    fn default() -> Self {
-        OptionalContextField::All
-    }
-}
-
-impl<'de> Deserialize<'de> for OptionalContextField {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let opt: Option<Context> = Option::deserialize(deserializer)?;
-        Ok(opt.map_or(OptionalContextField::All, OptionalContextField::Context))
-    }
-}
-
-impl Serialize for OptionalContextField {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            OptionalContextField::Context(ctx) => ctx.serialize(serializer),
-            OptionalContextField::All => serializer.serialize_none(),
-        }
-    }
+    All(String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
