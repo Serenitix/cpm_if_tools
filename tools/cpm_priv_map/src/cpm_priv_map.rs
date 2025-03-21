@@ -1,6 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::{self, Visitor};
+use std::fmt;
 use crate::object_identifer::ObjectID;
-// TODO make sure to specify yaml serialization and desserialization
+// TODO make sure to specify yaml serialization and deserialization
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CPMPrivMap {
@@ -41,30 +43,14 @@ fn default_all() -> Option<Vec<String>> {
 
 /*
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
+ *   - if field missing, default to All, if it is then parse to All or Context
  */
-/*
 #[derive(Debug, Deserialize, Serialize)]
 struct Principal {
     // TODO make this work correctly: point to a subject domain 
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
     //   well the grammar specifies it like this right now. so i will be 
     //   faithful to the grammar and propose changes after one version
-    subject: SubjectDomain,
-    #[serde(default = "default_execution_context")]
-    execution_context: ContextField,
-}
-
-fn default_execution_context() -> ContextField {
-    ContextField::All("All".to_string())
-}
-*/
-
-/*
- * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
- *   - if field missing, default to All, if it is then parse to All or Context
- */
-#[derive(Debug, Deserialize, Serialize)]
-struct Principal {
     subject: SubjectDomain,
     #[serde(default = "default_context_field")]
     execution_context: Option<ContextField>,
@@ -81,15 +67,6 @@ fn default_context_field() -> Option<ContextField> {
  * as a context object. This enum allows for either a defined context or "all", 
  * which then leads to simpler serialization and deserialization.
  */
-/*
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-enum ContextField {
-    Context(Context),
-    All(String),
-}
-*/
-
 #[derive(Debug, Serialize)]
 enum ContextField {
     Context(Context),
@@ -160,6 +137,6 @@ struct Context {
 #[derive(Debug, Deserialize, Serialize)]
 struct AccessDescriptor {
     objects: Vec<ObjectIdentifier>,
-    #[serde(default)]
-    object_context: ContextField,
+    #[serde(default = "default_context_field")]
+    object_context: Option<ContextField>,
 }
