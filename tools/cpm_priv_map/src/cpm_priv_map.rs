@@ -42,6 +42,7 @@ fn default_all() -> Option<Vec<String>> {
 /*
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
  */
+/*
 #[derive(Debug, Deserialize, Serialize)]
 struct Principal {
     // TODO make this work correctly: point to a subject domain 
@@ -50,11 +51,27 @@ struct Principal {
     //   faithful to the grammar and propose changes after one version
     subject: SubjectDomain,
     #[serde(default = "default_execution_context")]
-    execution_context: OptionalContextField,
+    execution_context: ContextField,
 }
 
-fn default_execution_context() -> OptionalContextField {
-    OptionalContextField::All
+fn default_execution_context() -> ContextField {
+    ContextField::All("All".to_string())
+}
+*/
+
+/*
+ * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
+ *   - if field missing, default to All, if it is then parse to All or Context
+ */
+#[derive(Debug, Deserialize, Serialize)]
+struct Principal {
+    subject: SubjectDomain,
+    #[serde(default = "default_context_field")]
+    execution_context: Option<ContextField>,
+}
+
+fn default_context_field() -> Option<ContextField> {
+    Some(ContextField::All)
 }
 
 /*
@@ -64,11 +81,62 @@ fn default_execution_context() -> OptionalContextField {
  * as a context object. This enum allows for either a defined context or "all", 
  * which then leads to simpler serialization and deserialization.
  */
+/*
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-enum OptionalContextField {
+enum ContextField {
     Context(Context),
     All(String),
+}
+*/
+
+#[derive(Debug, Serialize)]
+enum ContextField {
+    Context(Context),
+    All,
+}
+
+/*
+ * The field may be: missing, "All", or a context object. 
+ * Missing is handled by the Optional<ContextField> from serde. 
+ * Otherwise, match either the string "All" or a Context object. 
+ */
+impl<'de> Deserialize<'de> for ContextField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ContextFieldVisitor;
+
+        impl<'de> Visitor<'de> for ContextFieldVisitor {
+            type Value = ContextField;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a context object or the string \"All\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "All" {
+                    Ok(ContextField::All)
+                } else {
+                    Err(de::Error::unknown_variant(value, &["All"]))
+                }
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: de::MapAccess<'de>,
+            {
+                let context = Context::deserialize(de::value::MapAccessDeserializer::new(map))?;
+                Ok(ContextField::Context(context))
+            }
+        }
+
+        deserializer.deserialize_any(ContextFieldVisitor)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,5 +161,5 @@ struct Context {
 struct AccessDescriptor {
     objects: Vec<ObjectIdentifier>,
     #[serde(default)]
-    object_context: OptionalContextField,
+    object_context: ContextField,
 }
