@@ -11,6 +11,20 @@ pub struct CPMPrivMap {
     privileges: Vec<Privilege>,
 }
 
+impl CPMPrivMap {
+    pub fn object_map(&self) -> &Vec<ObjectDomain> {
+        &self.object_map
+    }
+
+    pub fn subject_map(&self) -> &Vec<SubjectDomain> {
+        &self.subject_map
+    }
+
+    pub fn privileges(&self) -> &Vec<Privilege> {
+        &self.privileges
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct ObjectDomain {
     name: String,
@@ -18,10 +32,30 @@ struct ObjectDomain {
     //objects: Vec<ObjectID>,
 }
 
+impl ObjectDomain {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn objects(&self) -> &Vec<String> {
+        &self.objects
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
+}
+
+impl SubjectDomain {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn subjects(&self) -> &Vec<String> {
+        &self.subjects
+    }
 }
 
 /*
@@ -45,6 +79,28 @@ struct Privilege {
     can_read: Option<RWPrivField>,
     #[serde(default = "default_rw_priv_field")]
     can_write: Option<RWPrivField>,
+}
+
+impl Privilege {
+    pub fn principal(&self) -> &Principal {
+        &self.principal
+    }
+
+    pub fn can_call(&self) -> &Option<CallRetPrivField> {
+        &self.can_call
+    }
+
+    pub fn can_return(&self) -> &Option<CallRetPrivField> {
+        &self.can_return
+    }
+
+    pub fn can_read(&self) -> &Option<RWPrivField> {
+        &self.can_read
+    }
+
+    pub fn can_write(&self) -> &Option<RWPrivField> {
+        &self.can_write
+    }
 }
 
 fn default_callret_priv_field() -> Option<CallRetPrivField> {
@@ -160,6 +216,16 @@ struct Principal {
     execution_context: Option<ContextField>,
 }
 
+impl Principal {
+    pub fn subject(&self) -> &SubjectDomain {
+        &self.subject
+    }
+
+    pub fn execution_context(&self) -> &Option<ContextField> {
+        &self.execution_context
+    }
+}
+
 fn default_context_field() -> Option<ContextField> {
     Some(ContextField::All)
 }
@@ -231,6 +297,20 @@ struct Context {
     gid: Option<String>,
 }
 
+impl Context {
+    pub fn call_context(&self) -> &Option<Vec<String>> {
+        &self.call_context
+    }
+
+    pub fn uid(&self) -> &Option<String> {
+        &self.uid
+    }
+
+    pub fn gid(&self) -> &Option<String> {
+        &self.gid
+    }
+}
+
 /*
  * Grammar: Object ::= { objects: [ ObjectDomainName ] | all
  *                     ? object_context: Context | all }
@@ -241,6 +321,16 @@ struct Context {
     ///objects: Vec<ObjectIdentifier>,
     #[serde(default = "default_context_field")]
     object_context: Option<ContextField>,
+}
+
+impl Object {
+    pub fn objects(&self) -> &Vec<String> {
+        &self.objects
+    }
+
+    pub fn object_context(&self) -> &Option<ContextField> {
+        &self.object_context
+    }
 }
 
 // Unit tests
