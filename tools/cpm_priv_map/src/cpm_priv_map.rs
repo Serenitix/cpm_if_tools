@@ -24,26 +24,130 @@ struct SubjectDomain {
     subjects: Vec<String>,
 }
 
+/*
+ * Grammar: 
+ *      Privilege ::= { 
+ *          principal: Principal,
+ *          ? can_call: [ SubjectDomainName ] | all,
+ *          ? can_return: [ SubjectDomainName ] | all,
+ *          ? can_read: [ Object ] | all,
+ *          ? can_write: [ Object ] | all,
+ *      } 
+ */
 #[derive(Debug, Deserialize, Serialize)]
 struct Privilege {
     principal: Principal,
-    #[serde(default = "default_all")]
-    can_call: Option<Vec<String>>,
-    #[serde(default = "default_all")]
-    can_return: Option<Vec<String>>,
-    #[serde(default = "default_all")]
-    can_read: Option<Vec<AccessDescriptor>>,
-    #[serde(default = "default_all")]
-    can_write: Option<Vec<AccessDescriptor>>,
+    #[serde(default = "default_callret_priv_field")]
+    can_call: Option<CallRetPrivField>,    
+    #[serde(default = "default_callret_priv_field")]
+    can_return: Option<CallRetPrivField>,
+    #[serde(default = "default_rw_priv_field")]
+    can_read: Option<RWPrivField>,
+    #[serde(default = "default_rw_priv_field")]
+    can_write: Option<RWPrivField>,
 }
 
-fn default_all() -> Option<Vec<String>> {
-    Some(vec!["all".to_string()])
+fn default_callret_priv_field() -> Option<CallRetPrivField> {
+    Some(CallRetPrivField::All)
+}
+
+#[derive(Debug, Serialize)]
+enum CallRetPrivField {
+    // TODO: switch to ObjectIdentifier/SubjectIdentifiers
+    // Grammar: ? can call: [ SubjectDomainName ] | all,
+    List(Vec<String>),
+    All,
+}
+
+impl<'de> Deserialize<'de> for CallRetPrivField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CallRetPrivFieldVisitor;
+
+        impl<'de> Visitor<'de> for CallRetPrivFieldVisitor {
+            type Value = CallRetPrivField;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a list of strings or the string \"all\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "all" {
+                    Ok(CallRetPrivField::All)
+                } else {
+                    Err(de::Error::unknown_variant(value, &["all"]))
+                }
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let values = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(CallRetPrivField::List(values))
+            }
+        }
+
+        deserializer.deserialize_any(CallRetPrivFieldVisitor)
+    }
+}
+
+fn default_rw_priv_field() -> Option<RWPrivField> {
+    Some(RWPrivField::All)
+}
+
+#[derive(Debug, Serialize)]
+enum RWPrivField {
+    List(Vec<Object>),
+    All,
+}
+
+impl<'de> Deserialize<'de> for RWPrivField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct RWPrivFieldVisitor;
+
+        impl<'de> Visitor<'de> for RWPrivFieldVisitor {
+            type Value = RWPrivField;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a list of objects or the string \"all\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "all" {
+                    Ok(RWPrivField::All)
+                } else {
+                    Err(de::Error::unknown_variant(value, &["all"]))
+                }
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let values = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(RWPrivField::List(values))
+            }
+        }
+
+        deserializer.deserialize_any(RWPrivFieldVisitor)
+    }
 }
 
 /*
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
- *   - if field missing, default to All, if it is then parse to All or Context
+ *   - if field missing, default to all, if it is then parse to all or Context
  */
 #[derive(Debug, Deserialize, Serialize)]
 struct Principal {
@@ -74,9 +178,9 @@ enum ContextField {
 }
 
 /*
- * The field may be: missing, "All", or a context object. 
+ * The field may be: missing, "all", or a context object. 
  * Missing is handled by the Optional<ContextField> from serde. 
- * Otherwise, match either the string "All" or a Context object. 
+ * Otherwise, match either the string "all" or a Context object. 
  */
 impl<'de> Deserialize<'de> for ContextField {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -89,17 +193,17 @@ impl<'de> Deserialize<'de> for ContextField {
             type Value = ContextField;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a context object or the string \"All\"")
+                formatter.write_str("a context object or the string \"all\"")
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                if value == "All" {
+                if value == "all" {
                     Ok(ContextField::All)
                 } else {
-                    Err(de::Error::unknown_variant(value, &["All"]))
+                    Err(de::Error::unknown_variant(value, &["all"]))
                 }
             }
 
@@ -116,6 +220,10 @@ impl<'de> Deserialize<'de> for ContextField {
     }
 }
 
+// Context ::= { ? call_context: [ SubjectDomainName | all ],
+//               ? uid: root | user | Variable | all,
+//               ? guid: Variable | all }
+// TODO: handle the option and default values correctly
 #[derive(Debug, Deserialize, Serialize)]
 struct Context {
     call_context: Option<Vec<String>>,
@@ -124,19 +232,13 @@ struct Context {
 }
 
 /*
- * The AccessDescriptor struct represents access permissions for objects.
- * 
- * Grammar:
- * 
- * AccessDescriptor:
- *   objects: [ObjectIdentifier]
- *   object_context: ?Context
- * 
- * If the object_context field is omitted, it defaults to "all".
+ * Grammar: Object ::= { objects: [ ObjectDomainName ] | all
+ *                     ? object_context: Context | all }
  */
 #[derive(Debug, Deserialize, Serialize)]
-struct AccessDescriptor {
-    objects: Vec<ObjectIdentifier>,
+ struct Object {
+    objects: Vec<String>,
+    ///objects: Vec<ObjectIdentifier>,
     #[serde(default = "default_context_field")]
     object_context: Option<ContextField>,
 }
