@@ -26,7 +26,7 @@ impl CPMPrivMap {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct ObjectDomain {
+pub struct ObjectDomain {
     name: String,
     objects: Vec<String>,
     //objects: Vec<ObjectID>,
@@ -43,7 +43,7 @@ impl ObjectDomain {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct SubjectDomain {
+pub struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
 }
@@ -69,7 +69,7 @@ impl SubjectDomain {
  *      } 
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct Privilege {
+pub struct Privilege {
     principal: Principal,
     #[serde(default = "default_callret_priv_field")]
     can_call: Option<CallRetPrivField>,    
@@ -108,7 +108,7 @@ fn default_callret_priv_field() -> Option<CallRetPrivField> {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-enum CallRetPrivField {
+pub enum CallRetPrivField {
     // TODO: switch to ObjectIdentifier/SubjectIdentifiers
     // Grammar: ? can call: [ SubjectDomainName ] | all,
     List(Vec<String>),
@@ -158,7 +158,7 @@ fn default_rw_priv_field() -> Option<RWPrivField> {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-enum RWPrivField {
+pub enum RWPrivField {
     List(Vec<Object>),
     All,
 }
@@ -206,7 +206,7 @@ impl<'de> Deserialize<'de> for RWPrivField {
  *   - if field missing, default to all, if it is then parse to all or Context
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct Principal {
+pub struct Principal {
     // TODO make this work correctly: point to a subject domain 
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
     //   well the grammar specifies it like this right now. so i will be 
@@ -238,7 +238,7 @@ fn default_context_field() -> Option<ContextField> {
  * which then leads to simpler serialization and deserialization.
  */
 #[derive(Debug, Serialize, PartialEq)]
-enum ContextField {
+pub enum ContextField {
     Context(Context),
     All,
 }
@@ -291,7 +291,7 @@ impl<'de> Deserialize<'de> for ContextField {
 //               ? guid: Variable | all }
 // TODO: handle the option and default values correctly
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
-struct Context {
+pub struct Context {
     call_context: Option<Vec<String>>,
     uid: Option<String>,
     gid: Option<String>,
@@ -316,7 +316,7 @@ impl Context {
  *                     ? object_context: Context | all }
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
- struct Object {
+pub struct Object {
     objects: Vec<String>,
     ///objects: Vec<ObjectIdentifier>,
     #[serde(default = "default_context_field")]
