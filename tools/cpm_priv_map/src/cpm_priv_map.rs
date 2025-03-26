@@ -1,24 +1,24 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde::de::{self, Visitor};
 use std::fmt;
-use crate::object_identifer::ObjectID;
+//use crate::object_identifer::ObjectID;
 // TODO make sure to specify yaml serialization and deserialization
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct CPMPrivMap {
     object_map: Vec<ObjectDomain>,
     subject_map: Vec<SubjectDomain>,
     privileges: Vec<Privilege>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct ObjectDomain {
     name: String,
     objects: Vec<String>,
     //objects: Vec<ObjectID>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
@@ -34,7 +34,7 @@ struct SubjectDomain {
  *          ? can_write: [ Object ] | all,
  *      } 
  */
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct Privilege {
     principal: Principal,
     #[serde(default = "default_callret_priv_field")]
@@ -51,7 +51,7 @@ fn default_callret_priv_field() -> Option<CallRetPrivField> {
     Some(CallRetPrivField::All)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 enum CallRetPrivField {
     // TODO: switch to ObjectIdentifier/SubjectIdentifiers
     // Grammar: ? can call: [ SubjectDomainName ] | all,
@@ -101,7 +101,7 @@ fn default_rw_priv_field() -> Option<RWPrivField> {
     Some(RWPrivField::All)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 enum RWPrivField {
     List(Vec<Object>),
     All,
@@ -149,7 +149,7 @@ impl<'de> Deserialize<'de> for RWPrivField {
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
  *   - if field missing, default to all, if it is then parse to all or Context
  */
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct Principal {
     // TODO make this work correctly: point to a subject domain 
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
@@ -165,13 +165,13 @@ fn default_context_field() -> Option<ContextField> {
 }
 
 /*
- * The context field is used for execution_context and subject_context fields 
+ * The context field is used for execution_context and object_context fields 
  * of the Principal and Object objects. The logic of the grammar allows for an 
  * optional context field that is either non-existent and defaults to "all" or 
  * as a context object. This enum allows for either a defined context or "all", 
  * which then leads to simpler serialization and deserialization.
  */
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 enum ContextField {
     Context(Context),
     All,
@@ -224,7 +224,7 @@ impl<'de> Deserialize<'de> for ContextField {
 //               ? uid: root | user | Variable | all,
 //               ? guid: Variable | all }
 // TODO: handle the option and default values correctly
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct Context {
     call_context: Option<Vec<String>>,
     uid: Option<String>,
@@ -235,10 +235,143 @@ struct Context {
  * Grammar: Object ::= { objects: [ ObjectDomainName ] | all
  *                     ? object_context: Context | all }
  */
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
  struct Object {
     objects: Vec<String>,
     ///objects: Vec<ObjectIdentifier>,
     #[serde(default = "default_context_field")]
     object_context: Option<ContextField>,
+}
+
+// Unit tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_yaml;
+    #[test]
+    fn test_deserialize_callret_priv_field_all() {
+        let yaml = "all";
+        let result: CallRetPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallRetPrivField::All);
+    }
+
+    #[test]
+    fn test_deserialize_callret_priv_field_list() {
+        let yaml = "- domain1\n- domain2";
+        let result: CallRetPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallRetPrivField::List(vec!["domain1".to_string(), "domain2".to_string()]));
+    }
+
+    #[test]
+    fn test_deserialize_callret_priv_field_empty_list() {
+        let yaml = "[]";
+        let result: CallRetPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallRetPrivField::List(vec![]));
+    }
+
+    #[test]
+    fn test_deserialize_rw_priv_field_all() {
+        let yaml = "all";
+        let result: RWPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, RWPrivField::All);
+    }
+
+    #[test]
+    fn test_deserialize_rw_priv_field_list() {
+        let yaml = "- objects:\n  - object1\n  - object2";
+        let result: RWPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, RWPrivField::List(vec![Object {
+            objects: vec!["object1".to_string(), "object2".to_string()],
+            object_context: Some(ContextField::All),
+        }]));
+    }
+
+    #[test]
+    fn test_deserialize_rw_priv_field_empty_list() {
+        let yaml = "[]";
+        let result: RWPrivField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, RWPrivField::List(vec![]));
+    }
+
+    #[test]
+    fn test_deserialize_context_field_all() {
+        let yaml = "all";
+        let result: ContextField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, ContextField::All);
+    }
+
+    #[test]
+    fn test_deserialize_context_field_context() {
+        let yaml = "call_context:\n  - domain1\n  - domain2\nuid: root\ngid: group1";
+        let result: ContextField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, ContextField::Context(Context {
+            call_context: Some(vec!["domain1".to_string(), "domain2".to_string()]),
+            uid: Some("root".to_string()),
+            gid: Some("group1".to_string()),
+        }));
+    }
+
+    #[test]
+    fn test_deserialize_context_field_missing_fields() {
+        let yaml = "call_context:\n  - domain1\n  - domain2";
+        let result: ContextField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, ContextField::Context(Context {
+            call_context: Some(vec!["domain1".to_string(), "domain2".to_string()]),
+            uid: None,
+            gid: None,
+        }));
+    }
+
+    #[test]
+    fn test_deserialize_invalid_data() {
+        let yaml = "invalid_data";
+        let result: Result<CallRetPrivField, _> = serde_yaml::from_str(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_full_cpm_priv_map() {
+        let yaml = "
+object_map:
+  - name: domain1
+    objects: [object1, object2]
+subject_map:
+  - name: subject1
+    subjects: [subject1, subject2]
+privileges:
+  - principal:
+      subject:
+        name: subject1
+        subjects: [subject1, subject2]
+      execution_context: all
+    can_call: all
+    can_return: all
+    can_read: all
+    can_write: all
+";
+        let result: CPMPrivMap = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CPMPrivMap {
+            object_map: vec![ObjectDomain {
+                name: "domain1".to_string(),
+                objects: vec!["object1".to_string(), "object2".to_string()],
+            }],
+            subject_map: vec![SubjectDomain {
+                name: "subject1".to_string(),
+                subjects: vec!["subject1".to_string(), "subject2".to_string()],
+            }],
+            privileges: vec![Privilege {
+                principal: Principal {
+                    subject: SubjectDomain {
+                        name: "subject1".to_string(),
+                        subjects: vec!["subject1".to_string(), "subject2".to_string()],
+                    },
+                    execution_context: Some(ContextField::All),
+                },
+                can_call: Some(CallRetPrivField::All),
+                can_return: Some(CallRetPrivField::All),
+                can_read: Some(RWPrivField::All),
+                can_write: Some(RWPrivField::All),
+            }],
+        });
+    }
 }
