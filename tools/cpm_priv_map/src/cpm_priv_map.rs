@@ -211,13 +211,20 @@ pub struct Principal {
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
     //   well the grammar specifies it like this right now. so i will be 
     //   faithful to the grammar and propose changes after one version
-    subject: SubjectDomain,
+    //subject: SubjectDomain,
+    subject: String,
     #[serde(default = "default_context_field")]
     execution_context: Option<ContextField>,
 }
 
 impl Principal {
+    /*
+    TODO Make proper subject doamin in next iteration, string for now
     pub fn subject(&self) -> &SubjectDomain {
+        &self.subject
+    }
+    */
+    pub fn subject(&self) -> &String {
         &self.subject
     }
 
@@ -430,9 +437,7 @@ subject_map:
     subjects: [subject1, subject2]
 privileges:
   - principal:
-      subject:
-        name: subject1
-        subjects: [subject1, subject2]
+      subject: subject1
       execution_context: all
     can_call: all
     can_return: all
@@ -451,10 +456,13 @@ privileges:
             }],
             privileges: vec![Privilege {
                 principal: Principal {
+                    /* TODO: switch to an actual object
                     subject: SubjectDomain {
                         name: "subject1".to_string(),
                         subjects: vec!["subject1".to_string(), "subject2".to_string()],
-                    },
+                    }, 
+                    */
+                    subject: "subject1".to_string(),
                     execution_context: Some(ContextField::All),
                 },
                 can_call: Some(CallRetPrivField::All),
