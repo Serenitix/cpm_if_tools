@@ -68,3 +68,9 @@ fn test_load_privilege_map_linux_4() {
     let url = "https://raw.githubusercontent.com/ndauten/CPM-Interchange-Format/refs/heads/main/examples/linux_4.yaml";
     test_privilege_map(url).unwrap();
 }
+
+#[test]
+fn test_load_privilege_map_password_example() {
+    let url = "https://raw.githubusercontent.com/ndauten/CPM-Interchange-Format/refs/heads/main/examples/password_example.yaml";
+    test_privilege_map(url).unwrap();
+}
