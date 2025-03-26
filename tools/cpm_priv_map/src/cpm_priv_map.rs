@@ -299,13 +299,14 @@ impl<'de> Deserialize<'de> for ContextField {
 // TODO: handle the option and default values correctly
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Context {
-    call_context: Option<Vec<String>>,
+    #[serde(default = "default_call_context_sub_field")]
+    call_context: Option<CallContextSubField>,
     uid: Option<String>,
     gid: Option<String>,
 }
 
 impl Context {
-    pub fn call_context(&self) -> &Option<Vec<String>> {
+    pub fn call_context(&self) -> &Option<CallContextSubField> {
         &self.call_context
     }
 
@@ -315,6 +316,60 @@ impl Context {
 
     pub fn gid(&self) -> &Option<String> {
         &self.gid
+    }
+}
+
+fn default_call_context_sub_field() -> Option<CallContextSubField> {
+    Some(CallContextSubField::All) // Placeholder for yet to be implemented
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CallContextSubField {
+    List(Vec<String>),
+    All,
+}
+
+/* Only implement two variants and leave the complex one for later */
+impl Serialize for CallContextSubField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            CallContextSubField::List(ref values) => values.serialize(serializer),
+            CallContextSubField::All => vec!["all".to_string()].serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CallContextSubField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CallContextSubFieldVisitor;
+
+        impl<'de> Visitor<'de> for CallContextSubFieldVisitor {
+            type Value = CallContextSubField;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a list of strings or a list with a single string \"all\"")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let values: Vec<String> = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                if values.len() == 1 && values[0] == "all" {
+                    Ok(CallContextSubField::All)
+                } else {
+                    Ok(CallContextSubField::List(values))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(CallContextSubFieldVisitor)
     }
 }
 
@@ -391,6 +446,41 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_call_context_sub_field_all() {
+        let yaml = "- all";
+        let result: CallContextSubField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallContextSubField::All);
+    }
+
+    #[test]
+    fn test_deserialize_call_context_sub_field_list() {
+        let yaml = "- domain1\n- domain2";
+        let result: CallContextSubField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()]));
+    }
+
+    #[test]
+    fn test_deserialize_call_context_sub_field_empty_list() {
+        let yaml = "[]";
+        let result: CallContextSubField = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(result, CallContextSubField::List(vec![]));
+    }
+
+    #[test]
+    fn test_serialize_call_context_sub_field_all() {
+        let value = CallContextSubField::All;
+        let yaml = serde_yaml::to_string(&value).unwrap();
+        assert_eq!(yaml, "- all\n");
+    }
+
+    #[test]
+    fn test_serialize_call_context_sub_field_list() {
+        let value = CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()]);
+        let yaml = serde_yaml::to_string(&value).unwrap();
+        assert_eq!(yaml, "- domain1\n- domain2\n");
+    }
+
+    #[test]
     fn test_deserialize_context_field_all() {
         let yaml = "all";
         let result: ContextField = serde_yaml::from_str(yaml).unwrap();
@@ -402,7 +492,7 @@ mod tests {
         let yaml = "call_context:\n  - domain1\n  - domain2\nuid: root\ngid: group1";
         let result: ContextField = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(result, ContextField::Context(Context {
-            call_context: Some(vec!["domain1".to_string(), "domain2".to_string()]),
+            call_context: Some(CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()])),
             uid: Some("root".to_string()),
             gid: Some("group1".to_string()),
         }));
@@ -413,7 +503,7 @@ mod tests {
         let yaml = "call_context:\n  - domain1\n  - domain2";
         let result: ContextField = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(result, ContextField::Context(Context {
-            call_context: Some(vec!["domain1".to_string(), "domain2".to_string()]),
+            call_context: Some(CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()])),
             uid: None,
             gid: None,
         }));
@@ -422,7 +512,7 @@ mod tests {
     #[test]
     fn test_deserialize_invalid_data() {
         let yaml = "invalid_data";
-        let result: Result<CallRetPrivField, _> = serde_yaml::from_str(yaml);
+        let result: Result<CallContextSubField, _> = serde_yaml::from_str(yaml);
         assert!(result.is_err());
     }
 
