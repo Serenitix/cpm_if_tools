@@ -9,11 +9,9 @@ fn download_file(url: &str) -> Result<String, Box<dyn Error>> {
     Ok(content)
 }
 
-#[test]
-fn test_load_sample_privilege_map() {
-    let url = "https://raw.githubusercontent.com/ndauten/CPM-Interchange-Format/refs/heads/main/examples/linux_2.yaml";
-    let yaml = download_file(url).unwrap();
-    let privilege_map: CPMPrivMap = serde_yaml::from_str(&yaml).unwrap();
+fn test_privilege_map(url: &str) -> Result<(), Box<dyn Error>> {
+    let yaml = download_file(url)?;
+    let privilege_map: CPMPrivMap = serde_yaml::from_str(&yaml)?;
     
     // Add assertions to verify the loaded privilege map using the new public interfaces
     assert!(privilege_map.object_map().len() > 0);
@@ -55,4 +53,18 @@ fn test_load_sample_privilege_map() {
             None => panic!("can_write is None"),
         }
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_load_privilege_map_linux_2() {
+    let url = "https://raw.githubusercontent.com/ndauten/CPM-Interchange-Format/refs/heads/main/examples/linux_2.yaml";
+    test_privilege_map(url).unwrap();
+}
+
+#[test]
+fn test_load_privilege_map_linux_4() {
+    let url = "https://raw.githubusercontent.com/ndauten/CPM-Interchange-Format/refs/heads/main/examples/linux_4.yaml";
+    test_privilege_map(url).unwrap();
 }
