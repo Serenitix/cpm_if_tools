@@ -35,9 +35,8 @@ fn test_privilege_map(url: &str) -> Result<(), Box<dyn Error>> {
         */
         
         match principal.execution_context() {
-            Some(ContextField::All) => (),
-            Some(ContextField::Context(_)) => (),
-            None => panic!("execution_context is None"),
+            ContextField::All => (),
+            ContextField::Context(_) => (),
         }
 
         match privilege.can_call() {

@@ -233,7 +233,7 @@ pub struct Principal {
     //subject: SubjectDomain,
     subject: String,
     #[serde(default = "default_context_field")]
-    execution_context: Option<ContextField>,
+    execution_context: ContextField,
 }
 
 impl Principal {
@@ -247,13 +247,13 @@ impl Principal {
         &self.subject
     }
 
-    pub fn execution_context(&self) -> &Option<ContextField> {
+    pub fn execution_context(&self) -> &ContextField {
         &self.execution_context
     }
 }
 
-fn default_context_field() -> Option<ContextField> {
-    Some(ContextField::All)
+fn default_context_field() -> ContextField {
+    ContextField::All
 }
 
 /*
@@ -271,7 +271,6 @@ pub enum ContextField {
 
 /*
  * The field may be: missing, "all", or a context object. 
- * Missing is handled by the Optional<ContextField> from serde. 
  * Otherwise, match either the string "all" or a Context object. 
  */
 impl<'de> Deserialize<'de> for ContextField {
@@ -305,6 +304,13 @@ impl<'de> Deserialize<'de> for ContextField {
             {
                 let context = Context::deserialize(de::value::MapAccessDeserializer::new(map))?;
                 Ok(ContextField::Context(context))
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ContextField::All)
             }
         }
 
@@ -455,7 +461,7 @@ pub struct Object {
     objects: Vec<String>,
     ///objects: Vec<ObjectIdentifier>,
     #[serde(default = "default_context_field")]
-    object_context: Option<ContextField>,
+    object_context: ContextField,
 }
 
 impl Object {
@@ -463,7 +469,7 @@ impl Object {
         &self.objects
     }
 
-    pub fn object_context(&self) -> &Option<ContextField> {
+    pub fn object_context(&self) -> &ContextField {
         &self.object_context
     }
 }
@@ -473,6 +479,42 @@ impl Object {
 mod tests {
     use super::*;
     use serde_yaml;
+
+    #[test]
+    fn test_deserialize_empty_execution_context() {
+        let yaml = r#"
+    principal:
+    subject: main_domain
+    execution_context:
+    "#;
+        let result: Principal = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            Principal {
+                subject: "main_domain".to_string(),
+                execution_context: ContextField::All, // Expecting default to "All"
+            }
+        );
+    }
+    
+    #[test]
+    fn test_deserialize_empty_object_context() {
+        let yaml = r#"
+    objects:
+    - object1
+    - object2
+    object_context:
+    "#;
+        let result: Object = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            result,
+            Object {
+                objects: vec!["object1".to_string(), "object2".to_string()],
+                object_context: ContextField::All, // Expecting default to "All"
+            }
+        );
+    }
+
     #[test]
     fn test_deserialize_callret_priv_field_all() {
         let yaml = "all";
@@ -507,7 +549,7 @@ mod tests {
         let result: RWPrivField = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(result, RWPrivField::List(vec![Object {
             objects: vec!["object1".to_string(), "object2".to_string()],
-            object_context: Some(ContextField::All),
+            object_context: ContextField::All,
         }]));
     }
 
@@ -626,7 +668,7 @@ privileges:
                     }, 
                     */
                     subject: "subject1".to_string(),
-                    execution_context: Some(ContextField::All),
+                    execution_context: ContextField::All,
                 },
                 can_call: CallRetPrivField::All,
                 can_return: CallRetPrivField::All,
