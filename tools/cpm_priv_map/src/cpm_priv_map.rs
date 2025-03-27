@@ -120,6 +120,26 @@ impl<'de> Deserialize<'de> for CallRetPrivField {
     where
         D: Deserializer<'de>,
     {
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a list of strings or the string \"all\"")
+        }
+
+        // Attempt to deserialize as a vector of strings
+        let result: Result<Vec<String>, _> = Vec::deserialize(deserializer);
+
+        match result {
+            Ok(values) => {
+                if values.is_empty() {
+                    Ok(CallRetPrivField::All) // Treat empty list as "all"
+                } else {
+                    Ok(CallRetPrivField::List(values))
+                }
+            }
+            Err(_) => Ok(CallRetPrivField::All), // Fallback to "all" if deserialization fails
+        }
+    }
+
+        /*
         struct CallRetPrivFieldVisitor;
 
         impl<'de> Visitor<'de> for CallRetPrivFieldVisitor {
@@ -147,10 +167,44 @@ impl<'de> Deserialize<'de> for CallRetPrivField {
                 let values = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
                 Ok(CallRetPrivField::List(values))
             }
+            
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CallRetPrivField::All) // Treat empty fields as "all"
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CallRetPrivField::All) // Treat empty fields as "all"
+            }
+            
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                // Attempt to deserialize as a sequence
+                let result: Result<Vec<String>, _> = Vec::deserialize(deserializer);
+                match result {
+                    Ok(values) => {
+                        if values.is_empty() {
+                            Ok(CallRetPrivField::All) // Treat empty list as "all"
+                        } else {
+                            Ok(CallRetPrivField::List(values))
+                        }
+                    }
+                    Err(_) => Ok(CallRetPrivField::All), // Fallback to "all" if deserialization fails
+                }
+            }
+
         }
 
         deserializer.deserialize_any(CallRetPrivFieldVisitor)
     }
+        */
 }
 
 fn default_rw_priv_field() -> Option<RWPrivField> {
@@ -301,8 +355,10 @@ impl<'de> Deserialize<'de> for ContextField {
 pub struct Context {
     #[serde(default = "default_call_context_sub_field")]
     call_context: Option<CallContextSubField>,
-    uid: Option<String>,
-    gid: Option<String>,
+    #[serde(default = "default_context_simple")]
+    uid: Option<ContextSimpleString>,
+    #[serde(default = "default_context_simple")]
+    gid: Option<ContextSimpleString>,
 }
 
 impl Context {
@@ -310,11 +366,11 @@ impl Context {
         &self.call_context
     }
 
-    pub fn uid(&self) -> &Option<String> {
+    pub fn uid(&self) -> &Option<ContextSimpleString> {
         &self.uid
     }
 
-    pub fn gid(&self) -> &Option<String> {
+    pub fn gid(&self) -> &Option<ContextSimpleString> {
         &self.gid
     }
 }
@@ -370,6 +426,58 @@ impl<'de> Deserialize<'de> for CallContextSubField {
         }
 
         deserializer.deserialize_any(CallContextSubFieldVisitor)
+    }
+}
+
+fn default_context_simple() -> Option<ContextSimpleString> {
+    Some(ContextSimpleString::All) 
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ContextSimpleString {
+    String(String),
+    All,
+}
+
+impl Serialize for ContextSimpleString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            ContextSimpleString::String(ref value) => value.serialize(serializer),
+            ContextSimpleString::All => "all".serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ContextSimpleString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ContextSimpleStringVisitor;
+
+        impl<'de> Visitor<'de> for ContextSimpleStringVisitor {
+            type Value = ContextSimpleString;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or the string \"all\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "all" {
+                    Ok(ContextSimpleString::All)
+                } else {
+                    Ok(ContextSimpleString::String(value.to_string()))
+                }
+            }
+        }
+
+        deserializer.deserialize_str(ContextSimpleStringVisitor)
     }
 }
 
@@ -493,8 +601,8 @@ mod tests {
         let result: ContextField = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(result, ContextField::Context(Context {
             call_context: Some(CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()])),
-            uid: Some("root".to_string()),
-            gid: Some("group1".to_string()),
+            uid: Some(ContextSimpleString::String("root".to_string())),
+            gid: Some(ContextSimpleString::String("group1".to_string())),
         }));
     }
 
@@ -504,8 +612,8 @@ mod tests {
         let result: ContextField = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(result, ContextField::Context(Context {
             call_context: Some(CallContextSubField::List(vec!["domain1".to_string(), "domain2".to_string()])),
-            uid: None,
-            gid: None,
+            uid: Some(ContextSimpleString::All),
+            gid: Some(ContextSimpleString::All),
         }));
     }
 
