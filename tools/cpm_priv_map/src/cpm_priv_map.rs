@@ -115,22 +115,51 @@ pub enum CallRetPrivField {
     All,
 }
 
+/* Default all non vector values to All */
 impl<'de> Deserialize<'de> for CallRetPrivField {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        //fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            //formatter.write_str("a list of strings or the string \"all\"")
-        //}
+        struct CallRetPrivFieldVisitor;
 
-        // Attempt to deserialize as a vector of strings
-        let result: Result<Vec<String>, _> = Vec::deserialize(deserializer);
+        impl<'de> Visitor<'de> for CallRetPrivFieldVisitor {
+            type Value = CallRetPrivField;
 
-        match result {
-            Ok(values) => Ok(CallRetPrivField::List(values)),
-            Err(_) => Ok(CallRetPrivField::All), // Fallback to "all" if deserialization fails
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a list of strings or the string \"all\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "all" {
+                    Ok(CallRetPrivField::All)
+                } else {
+                    Err(de::Error::unknown_variant(value, &["all"]))
+                }
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let values = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(CallRetPrivField::List(values))
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // Handle explicitly empty fields (e.g., `can_call:`)
+                Ok(CallRetPrivField::All)
+            }
+
         }
+
+        deserializer.deserialize_any(CallRetPrivFieldVisitor)
     }
 }
 
@@ -149,17 +178,45 @@ impl<'de> Deserialize<'de> for RWPrivField {
     where
         D: Deserializer<'de>,
     {
-        //fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            //formatter.write_str("a list of strings or the string \"all\"")
-        //}
+        struct RWPrivFieldVisitor;
 
-        // Attempt to deserialize as a vector of strings
-        let result: Result<Vec<Object>, _> = Vec::deserialize(deserializer);
+        impl<'de> Visitor<'de> for RWPrivFieldVisitor {
+            type Value = RWPrivField;
 
-        match result {
-            Ok(values) => Ok(RWPrivField::List(values)),
-            Err(_) => Ok(RWPrivField::All), // Fallback to "all" if deserialization fails
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a list of strings or the string \"all\"")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value == "all" {
+                    Ok(RWPrivField::All)
+                } else {
+                    Err(de::Error::unknown_variant(value, &["all"]))
+                }
+            }
+
+            fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let values = Vec::deserialize(de::value::SeqAccessDeserializer::new(seq))?;
+                Ok(RWPrivField::List(values))
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                // Handle explicitly empty fields (e.g., `can_call:`)
+                Ok(RWPrivField::All)
+            }
+
         }
+
+        deserializer.deserialize_any(RWPrivFieldVisitor)
     }
 }
 
