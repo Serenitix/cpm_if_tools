@@ -17,11 +17,22 @@ fn test_privilege_map(url: &str) -> Result<(), Box<dyn Error>> {
     assert!(privilege_map.object_map().len() > 0);
     assert!(privilege_map.subject_map().len() > 0);
     assert!(privilege_map.privileges().len() > 0);
+        
+    dbg!(&privilege_map);
 
     // Additional assertions to verify the contents of the privilege map
     for privilege in privilege_map.privileges() {
         let principal = privilege.principal();
         let principal_subject = principal.subject();
+
+        /*
+        dbg!(principal_subject);
+        dbg!(principal.execution_context());
+        dbg!(privilege.can_call());
+        dbg!(privilege.can_return());
+        dbg!(privilege.can_read());
+        dbg!(privilege.can_write());
+        */
         
         match principal.execution_context() {
             Some(ContextField::All) => (),
@@ -30,27 +41,23 @@ fn test_privilege_map(url: &str) -> Result<(), Box<dyn Error>> {
         }
 
         match privilege.can_call() {
-            Some(CallRetPrivField::All) => (),
-            Some(CallRetPrivField::List(_)) => (),
-            None => panic!("can_call is None"),
+            CallRetPrivField::All => (),
+            CallRetPrivField::List(_) => (),
         }
 
         match privilege.can_return() {
-            Some(CallRetPrivField::All) => (),
-            Some(CallRetPrivField::List(_)) => (),
-            None => panic!("can_return is None"),
+            CallRetPrivField::All => (),
+            CallRetPrivField::List(_) => (),
         }
 
         match privilege.can_read() {
-            Some(RWPrivField::All) => (),
-            Some(RWPrivField::List(_)) => (),
-            None => panic!("can_read is None"),
+            RWPrivField::All => (),
+            RWPrivField::List(_) => (),
         }
 
         match privilege.can_write() {
-            Some(RWPrivField::All) => (),
-            Some(RWPrivField::List(_)) => (),
-            None => panic!("can_write is None"),
+            RWPrivField::All => (),
+            RWPrivField::List(_) => (),
         }
     }
 
