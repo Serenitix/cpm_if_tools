@@ -112,6 +112,7 @@ pub enum CallRetPrivField {
     // TODO: switch to ObjectIdentifier/SubjectIdentifiers
     // Grammar: ? can call: [ SubjectDomainName ] | all,
     List(Vec<String>),
+    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
 }
 
@@ -170,6 +171,7 @@ fn default_rw_priv_field() -> RWPrivField {
 #[derive(Debug, Serialize, PartialEq)]
 pub enum RWPrivField {
     List(Vec<Object>),
+    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
 }
 
@@ -266,6 +268,7 @@ fn default_context_field() -> ContextField {
 #[derive(Debug, Serialize, PartialEq)]
 pub enum ContextField {
     Context(Context),
+    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
 }
 
@@ -351,6 +354,9 @@ fn default_call_context_sub_field() -> Option<CallContextSubField> {
 }
 
 #[derive(Debug, PartialEq)]
+/*
+ * This serializes to a vector of strings or a vector of a single string "all"
+ */
 pub enum CallContextSubField {
     List(Vec<String>),
     All,
@@ -483,9 +489,9 @@ mod tests {
     #[test]
     fn test_deserialize_empty_execution_context() {
         let yaml = r#"
-    principal:
-    subject: main_domain
-    execution_context:
+principal:
+subject: main_domain
+execution_context:
     "#;
         let result: Principal = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
@@ -500,10 +506,10 @@ mod tests {
     #[test]
     fn test_deserialize_empty_object_context() {
         let yaml = r#"
-    objects:
-    - object1
-    - object2
-    object_context:
+objects:
+- object1
+- object2
+object_context:
     "#;
         let result: Object = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
@@ -676,5 +682,42 @@ privileges:
                 can_write: RWPrivField::All,
             }],
         });
+    }
+
+    #[test]
+    fn test_serialize_deserialize_cpm_priv_map() {
+        let input_yaml = r#"
+object_map:
+  - name: domain1
+    objects: [object1, object2]
+subject_map:
+  - name: subject1
+    subjects: [subject1, subject2]
+privileges:
+  - principal:
+      subject: subject1
+      execution_context: all
+    can_call: all
+    can_return: all
+    can_read: all
+    can_write: all
+    "#;
+
+        // Deserialize the YAML into a CPMPrivMap
+        let deserialized: CPMPrivMap = serde_yaml::from_str(input_yaml).unwrap();
+
+        // Serialize the CPMPrivMap back into YAML
+        let serialized_yaml = serde_yaml::to_string(&deserialized).unwrap();
+
+        // Deserialize the serialized YAML again to ensure consistency
+        let re_deserialized: CPMPrivMap = serde_yaml::from_str(&serialized_yaml).unwrap();
+
+        // Assert that the re-deserialized object matches the original deserialized object
+        assert_eq!(deserialized, re_deserialized);
+
+        // Optionally, check if the serialized YAML matches the input YAML (ignoring formatting differences)
+        let normalized_input: CPMPrivMap = serde_yaml::from_str(input_yaml).unwrap();
+        let normalized_serialized: CPMPrivMap = serde_yaml::from_str(&serialized_yaml).unwrap();
+        assert_eq!(normalized_input, normalized_serialized);
     }
 }
