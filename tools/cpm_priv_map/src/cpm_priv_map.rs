@@ -1,7 +1,11 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde::de::{self, Visitor};
+use serde::ser::Serializer;
+use std::char::ToUppercase;
 use std::fmt;
-//use crate::object_identifer::ObjectID;
+//pub mod object_id;
+
+//use object_identifer::ObjectID;
 // TODO make sure to specify yaml serialization and deserialization
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -12,6 +16,15 @@ pub struct CPMPrivMap {
 }
 
 impl CPMPrivMap {
+
+    pub fn new() -> Self {
+        Self {
+            object_map: vec![],
+            subject_map: vec![],
+            privileges: vec![],
+        }
+    }
+
     pub fn object_map(&self) -> &Vec<ObjectDomain> {
         &self.object_map
     }
@@ -28,17 +41,195 @@ impl CPMPrivMap {
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct ObjectDomain {
     name: String,
-    objects: Vec<String>,
-    //objects: Vec<ObjectID>,
+    //objects: Vec<String>,
+    objects: Vec<ObjectID>,
 }
 
 impl ObjectDomain {
+
+    pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
+        Self { name, objects }
+    }
+    pub fn new_empty(name: String) -> Self {
+        Self { name, objects: vec![] }
+    }
+    pub fn add_object(&mut self, object: ObjectID) {
+        self.objects.push(object);
+    }
+    pub fn remove_object(&mut self, object: &ObjectID) {
+        self.objects.retain(|o| o != object);
+    }
+    pub fn clear_objects(&mut self) {
+        self.objects.clear();
+    }
+    pub fn set_objects(&mut self, objects: Vec<ObjectID>) {
+        self.objects = objects;
+    }
+    pub fn get_object(&self, index: usize) -> Option<&ObjectID> {
+        self.objects.get(index)
+    }
+    pub fn get_object_by_name(&self, name: &str) -> Option<&ObjectID> {
+        self.objects.iter().find(|o| o.name == name)
+    }
+    pub fn get_object_by_path(&self, path: &str) -> Option<&ObjectID> {
+        self.objects.iter().find(|o| o.path == path)
+    }
+    pub fn get_object_by_lineno(&self, lineno: &str) -> Option<&ObjectID> {
+        self.objects.iter().find(|o| o.lineno == lineno)
+    }
+    pub fn get_object_by_alloc_type(&self, alloc_type: &AllocType) -> Option<&ObjectID> {
+        self.objects.iter().find(|o| o.alloc_type == *alloc_type)
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn objects(&self) -> &Vec<String> {
+    pub fn objects(&self) -> &Vec<ObjectID> {
         &self.objects
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ObjectID {
+    alloc_type: AllocType,
+    path: String,
+    lineno: String,
+    name: String,
+}
+
+impl ObjectID {
+    pub fn new(alloc_type: AllocType, path: String, lineno: String, name: String) -> Self {
+        Self {
+            alloc_type,
+            path,
+            lineno,
+            name,
+        }
+    }
+
+    pub fn alloc_type(&self) -> &AllocType {
+        &self.alloc_type
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn lineno(&self) -> &str {
+        &self.lineno
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+// Grammar: "<alloc_type>|<path>|<lineno>|<name>"
+impl Serialize for ObjectID {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!(
+            "{}|{}|{}|{}",
+            self.alloc_type, self.path, self.lineno, self.name
+        );
+        serializer.serialize_str(&s)
+    }
+}
+
+// Grammar: "<alloc_type>|<path>|<lineno>|<name>"
+impl<'de> Deserialize<'de> for ObjectID {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let parts: Vec<&str> = s.split('|').collect();
+
+        if parts.len() == 4 {
+            // If the format is correct, parse the fields
+            let alloc_type = parts[0].parse::<AllocType>().map_err(de::Error::custom)?;
+            Ok(ObjectID {
+                alloc_type,
+                path: parts[1].to_string(),
+                lineno: parts[2].to_string(),
+                name: parts[3].to_string(),
+            })
+        } else {
+            // Fallback: Treat the entire string as the `name` field
+            Ok(ObjectID {
+                alloc_type: AllocType::Other, // Default alloc_type
+                path: "".to_string(),         // Default empty path
+                lineno: "".to_string(),       // Default empty line number
+                name: s,                      // Use the entire string as the name
+            })
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")] // Automatically convert to uppercase
+pub enum AllocType {
+    Global,
+    Local,
+    Heap,
+    StackFrame,
+    StackRegion,
+    IO,
+    Other
+}
+
+impl fmt::Display for AllocType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AllocType::Global => write!(f, "GLOBAL"),
+            AllocType::Local => write!(f, "LOCAL"),
+            AllocType::Heap => write!(f, "HEAP"),
+            AllocType::StackFrame => write!(f, "STACK_FRAME"),
+            AllocType::StackRegion => write!(f, "STACK_REGION"),
+            AllocType::IO => write!(f, "IO"),
+            AllocType::Other => write!(f, "OTHER"),
+        }
+    }
+}
+
+impl std::str::FromStr for AllocType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        //match s.to_uppercase().as_str() {
+        match s {
+            "GLOBAL" => Ok(AllocType::Global),
+            "LOCAL" => Ok(AllocType::Local),
+            "HEAP" => Ok(AllocType::Heap),
+            "kmalloc_reserve" => Ok(AllocType::Heap),
+            "xdr_alloc_bvec" => Ok(AllocType::Heap),
+            "__netdev_alloc_skb" => Ok(AllocType::Heap),
+            "kmemdup_nul" => Ok(AllocType::Heap),
+            "dst_cow_metrics_generic" => Ok(AllocType::Heap),
+            "nfs_writehdr_alloc" => Ok(AllocType::Heap),
+            "rpc_malloc" => Ok(AllocType::Heap),
+            "unx_lookup_cred" => Ok(AllocType::Heap),
+            "xprt_alloc_slot" => Ok(AllocType::Heap),
+            "nfs_page_create" => Ok(AllocType::Heap),
+            "nfs_readhdr_alloc" => Ok(AllocType::Heap),
+            "dst_alloc" => Ok(AllocType::Heap),
+            "rpc_new_task" => Ok(AllocType::Heap),
+            "___neigh_create" => Ok(AllocType::Heap),
+            "__alloc_skb" => Ok(AllocType::Heap),
+            "STACK_FRAME" => Ok(AllocType::StackFrame),
+            "STACK_REGION" => Ok(AllocType::StackRegion),
+            "IO" => Ok(AllocType::IO),
+            "OTHER" => Ok(AllocType::Other),
+            "Invalid" => Ok(AllocType::Other),
+            _ => {
+                // Print a message for invalid alloc_type
+                println!("Warning: Invalid alloc_type '{}', defaulting to OTHER", s);
+                //Err(format!("Invalid alloc_type: {}", s))
+                Ok(AllocType::Other)
+            }
+        }
     }
 }
 
@@ -631,6 +822,70 @@ object_context:
     }
 
     #[test]
+    fn test_serialize_object_id() {
+        let object_id = ObjectID {
+            alloc_type: AllocType::Global,
+            path: "/path/to/file".to_string(),
+            lineno: "42".to_string(),
+            name: "my_object".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&object_id).unwrap();
+        assert_eq!(serialized, "\"GLOBAL|/path/to/file|42|my_object\"");
+    }
+
+    #[test]
+    fn test_deserialize_object_id() {
+        let serialized = "\"GLOBAL|/path/to/file|42|my_object\"";
+
+        let deserialized: ObjectID = serde_json::from_str(serialized).unwrap();
+        assert_eq!(
+            deserialized,
+            ObjectID {
+                alloc_type: AllocType::Global,
+                path: "/path/to/file".to_string(),
+                lineno: "42".to_string(),
+                name: "my_object".to_string(),
+            }
+        );
+    }
+
+    /* TODO ADD LATER
+    #[test]
+    fn test_invalid_alloc_type() {
+        let serialized = "\"Invalid|/path/to/file|42|my_object\"";
+
+        let deserialized: Result<ObjectID, _> = serde_json::from_str(serialized);
+        assert!(deserialized.is_err());
+    }
+    */
+
+    #[test]
+    fn test_alloc_type_to_string() {
+        assert_eq!(AllocType::Global.to_string(), "GLOBAL");
+        assert_eq!(AllocType::Local.to_string(), "LOCAL");
+        assert_eq!(AllocType::Heap.to_string(), "HEAP");
+        assert_eq!(AllocType::StackFrame.to_string(), "STACK_FRAME");
+        assert_eq!(AllocType::StackRegion.to_string(), "STACK_REGION");
+        assert_eq!(AllocType::IO.to_string(), "IO");
+        assert_eq!(AllocType::Other.to_string(), "OTHER");
+    }
+
+    #[test]
+    fn test_alloc_type_from_str() {
+        assert_eq!("GLOBAL".parse::<AllocType>().unwrap(), AllocType::Global);
+        assert_eq!("LOCAL".parse::<AllocType>().unwrap(), AllocType::Local);
+        assert_eq!("HEAP".parse::<AllocType>().unwrap(), AllocType::Heap);
+        assert_eq!("STACK_FRAME".parse::<AllocType>().unwrap(), AllocType::StackFrame);
+        assert_eq!("STACK_REGION".parse::<AllocType>().unwrap(), AllocType::StackRegion);
+        assert_eq!("IO".parse::<AllocType>().unwrap(), AllocType::IO);
+        assert_eq!("OTHER".parse::<AllocType>().unwrap(), AllocType::Other);
+
+        //let invalid = "Invalid".parse::<AllocType>();
+        //assert!(invalid.is_err());
+    }
+
+    #[test]
     fn test_deserialize_invalid_data() {
         let yaml = "invalid_data";
         let result: Result<CallContextSubField, _> = serde_yaml::from_str(yaml);
@@ -640,48 +895,58 @@ object_context:
     #[test]
     fn test_deserialize_full_cpm_priv_map() {
         let yaml = "
-object_map:
-  - name: domain1
-    objects: [object1, object2]
-subject_map:
-  - name: subject1
-    subjects: [subject1, subject2]
-privileges:
-  - principal:
-      subject: subject1
-      execution_context: all
-    can_call: all
-    can_return: all
-    can_read: all
-    can_write: all
-";
+    object_map:
+      - name: domain1
+        objects: [object1, object2]
+    subject_map:
+      - name: subject1
+        subjects: [subject1, subject2]
+    privileges:
+      - principal:
+          subject: subject1
+          execution_context: all
+        can_call: all
+        can_return: all
+        can_read: all
+        can_write: all
+    ";
         let result: CPMPrivMap = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(result, CPMPrivMap {
-            object_map: vec![ObjectDomain {
-                name: "domain1".to_string(),
-                objects: vec!["object1".to_string(), "object2".to_string()],
-            }],
-            subject_map: vec![SubjectDomain {
-                name: "subject1".to_string(),
-                subjects: vec!["subject1".to_string(), "subject2".to_string()],
-            }],
-            privileges: vec![Privilege {
-                principal: Principal {
-                    /* TODO: switch to an actual object
-                    subject: SubjectDomain {
-                        name: "subject1".to_string(),
-                        subjects: vec!["subject1".to_string(), "subject2".to_string()],
-                    }, 
-                    */
-                    subject: "subject1".to_string(),
-                    execution_context: ContextField::All,
-                },
-                can_call: CallRetPrivField::All,
-                can_return: CallRetPrivField::All,
-                can_read: RWPrivField::All,
-                can_write: RWPrivField::All,
-            }],
-        });
+        assert_eq!(
+            result,
+            CPMPrivMap {
+                object_map: vec![ObjectDomain::new(
+                    "domain1".to_string(),
+                    vec![
+                        ObjectID::new(
+                            AllocType::Other, // Default alloc_type for fallback
+                            "".to_string(),   // Default empty path
+                            "".to_string(),   // Default empty line number
+                            "object1".to_string()
+                        ),
+                        ObjectID::new(
+                            AllocType::Other, // Default alloc_type for fallback
+                            "".to_string(),   // Default empty path
+                            "".to_string(),   // Default empty line number
+                            "object2".to_string()
+                        ),
+                    ]
+                )],
+                subject_map: vec![SubjectDomain {
+                    name: "subject1".to_string(),
+                    subjects: vec!["subject1".to_string(), "subject2".to_string()],
+                }],
+                privileges: vec![Privilege {
+                    principal: Principal {
+                        subject: "subject1".to_string(),
+                        execution_context: ContextField::All,
+                    },
+                    can_call: CallRetPrivField::All,
+                    can_return: CallRetPrivField::All,
+                    can_read: RWPrivField::All,
+                    can_write: RWPrivField::All,
+                }],
+            }
+        );
     }
 
     #[test]
