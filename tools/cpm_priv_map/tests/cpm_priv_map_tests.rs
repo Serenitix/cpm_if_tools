@@ -18,7 +18,7 @@ fn test_privilege_map(url: &str) -> Result<(), Box<dyn Error>> {
     assert!(privilege_map.subject_map().len() > 0);
     assert!(privilege_map.privileges().len() > 0);
         
-    dbg!(&privilege_map);
+    //dbg!(&privilege_map);
 
     // Additional assertions to verify the contents of the privilege map
     for privilege in privilege_map.privileges() {
