@@ -3,6 +3,8 @@ use serde::de::{self, Visitor};
 use serde::ser::Serializer;
 use std::char::ToUppercase;
 use std::fmt;
+use std::collections::HashSet;
+
 //pub mod object_id;
 
 //use object_identifer::ObjectID;
@@ -194,40 +196,44 @@ impl fmt::Display for AllocType {
     }
 }
 
+const ALLOWED_ALLOCATORS: &[&str] = &[
+    "kmalloc_reserve",
+    "xdr_alloc_bvec",
+    "__netdev_alloc_skb",
+    "kmemdup_nul",
+    "dst_cow_metrics_generic",
+    "nfs_writehdr_alloc",
+    "rpc_malloc",
+    "unx_lookup_cred",
+    "xprt_alloc_slot",
+    "nfs_page_create",
+    "nfs_readhdr_alloc",
+    "dst_alloc",
+    "rpc_new_task",
+    "___neigh_create",
+    "__alloc_skb",
+];
+
 impl std::str::FromStr for AllocType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //match s.to_uppercase().as_str() {
         match s {
             "GLOBAL" => Ok(AllocType::Global),
             "LOCAL" => Ok(AllocType::Local),
             "HEAP" => Ok(AllocType::Heap),
-            "kmalloc_reserve" => Ok(AllocType::Heap),
-            "xdr_alloc_bvec" => Ok(AllocType::Heap),
-            "__netdev_alloc_skb" => Ok(AllocType::Heap),
-            "kmemdup_nul" => Ok(AllocType::Heap),
-            "dst_cow_metrics_generic" => Ok(AllocType::Heap),
-            "nfs_writehdr_alloc" => Ok(AllocType::Heap),
-            "rpc_malloc" => Ok(AllocType::Heap),
-            "unx_lookup_cred" => Ok(AllocType::Heap),
-            "xprt_alloc_slot" => Ok(AllocType::Heap),
-            "nfs_page_create" => Ok(AllocType::Heap),
-            "nfs_readhdr_alloc" => Ok(AllocType::Heap),
-            "dst_alloc" => Ok(AllocType::Heap),
-            "rpc_new_task" => Ok(AllocType::Heap),
-            "___neigh_create" => Ok(AllocType::Heap),
-            "__alloc_skb" => Ok(AllocType::Heap),
             "STACK_FRAME" => Ok(AllocType::StackFrame),
             "STACK_REGION" => Ok(AllocType::StackRegion),
             "IO" => Ok(AllocType::IO),
             "OTHER" => Ok(AllocType::Other),
-            "Invalid" => Ok(AllocType::Other),
             _ => {
-                // Print a message for invalid alloc_type
-                println!("Warning: Invalid alloc_type '{}', defaulting to OTHER", s);
-                //Err(format!("Invalid alloc_type: {}", s))
-                Ok(AllocType::Other)
+                if ALLOWED_ALLOCATORS.contains(&s) {
+                    Ok(AllocType::Heap)
+                } else {
+                    // Print a warning to stderr for unknown allocators
+                    eprintln!("Warning: Unknown allocator '{}', defaulting to OTHER", s);
+                    Ok(AllocType::Other)
+                }
             }
         }
     }
@@ -859,6 +865,23 @@ object_context:
         assert!(deserialized.is_err());
     }
     */
+
+    #[test]
+    fn test_unknown_allocator_warning() {
+        let allocators = vec![
+            "kmalloc_reserve", // Known allocator
+            "unknown_allocator_1", // Unknown allocator
+            "xdr_alloc_bvec", // Known allocator
+            "unknown_allocator_2", // Unknown allocator
+        ];
+    
+        for allocator in allocators {
+            let alloc_type: AllocType = allocator.parse().unwrap();
+            if allocator.starts_with("unknown") {
+                assert_eq!(alloc_type, AllocType::Other);
+            }
+        }
+    }
 
     #[test]
     fn test_alloc_type_to_string() {
