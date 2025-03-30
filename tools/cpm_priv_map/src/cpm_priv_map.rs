@@ -4,6 +4,8 @@ use serde::ser::Serializer;
 use std::char::ToUppercase;
 use std::fmt;
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::Write;
 
 //pub mod object_id;
 
@@ -12,10 +14,12 @@ use std::collections::HashSet;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct CPMPrivMap {
-    object_map: Vec<ObjectDomain>,
-    subject_map: Vec<SubjectDomain>,
-    privileges: Vec<Privilege>,
+    pub object_map: Vec<ObjectDomain>,
+    pub subject_map: Vec<SubjectDomain>,
+    pub privileges: Vec<Privilege>,
 }
+
+
 
 impl CPMPrivMap {
 
@@ -38,6 +42,22 @@ impl CPMPrivMap {
     pub fn privileges(&self) -> &Vec<Privilege> {
         &self.privileges
     }
+
+    pub fn save_to_yaml(&self, file_path: &str) -> 
+        Result<(), Box<dyn std::error::Error>> 
+    {
+        // Serialize the CPMPrivMap to a YAML string
+        let serialized_yaml = serde_yaml::to_string(self)?;
+        
+        // Create or overwrite the file
+        let mut file = File::create(file_path)?;
+        
+        // Write the serialized YAML to the file
+        file.write_all(serialized_yaml.as_bytes())?;
+        
+        Ok(())
+    }
+
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -1007,5 +1027,36 @@ privileges:
         let normalized_input: CPMPrivMap = serde_yaml::from_str(input_yaml).unwrap();
         let normalized_serialized: CPMPrivMap = serde_yaml::from_str(&serialized_yaml).unwrap();
         assert_eq!(normalized_input, normalized_serialized);
+    }
+
+    #[test]
+    fn test_save_to_yaml() {
+        let mut cpm_pmap = CPMPrivMap::new();
+
+        // Populate the CPMPrivMap with example data
+        cpm_pmap.object_map.push(ObjectDomain::new(
+            "domain1".to_string(),
+            vec![
+                ObjectID::new(
+                    AllocType::Global,
+                    "/path/to/file".to_string(),
+                    "42".to_string(),
+                    "object1".to_string(),
+                ),
+            ],
+        ));
+
+        // Save to a temporary file
+        let file_path = "test_output.yaml";
+        cpm_pmap.save_to_yaml(file_path).unwrap();
+
+        // Read the file back and verify its contents
+        let saved_yaml = std::fs::read_to_string(file_path).unwrap();
+        let deserialized: CPMPrivMap = serde_yaml::from_str(&saved_yaml).unwrap();
+
+        assert_eq!(cpm_pmap, deserialized);
+
+        // Clean up the test file
+        std::fs::remove_file(file_path).unwrap();
     }
 }
