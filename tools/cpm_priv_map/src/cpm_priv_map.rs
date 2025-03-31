@@ -39,6 +39,10 @@ impl CPMPrivMap {
         &self.subject_map
     }
 
+    pub fn add_subject_domain(&mut self, subject_domain: SubjectDomain) {
+        self.subject_map.push(subject_domain);
+    }
+
     pub fn privileges(&self) -> &Vec<Privilege> {
         &self.privileges
     }
@@ -266,6 +270,23 @@ pub struct SubjectDomain {
 }
 
 impl SubjectDomain {
+
+    pub fn new(name: String, subjects: Vec<String>) -> Self {
+        Self { name, subjects }
+    }
+
+    pub fn add_subject(&mut self, subject: String) {
+        self.subjects.push(subject);
+    }
+
+    pub fn add_subjects(&mut self, subjects: Vec<String>) {
+        self.subjects.extend(subjects);
+    }
+
+    pub fn new_empty(name: String) -> Self {
+        Self { name, subjects: vec![] }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
