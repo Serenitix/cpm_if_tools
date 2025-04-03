@@ -19,8 +19,6 @@ pub struct CPMPrivMap {
     pub privileges: Vec<Privilege>,
 }
 
-
-
 impl CPMPrivMap {
 
     pub fn new() -> Self {
@@ -349,12 +347,11 @@ fn default_callret_priv_field() -> CallRetPrivField {
     CallRetPrivField::All
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum CallRetPrivField {
     // TODO: switch to ObjectIdentifier/SubjectIdentifiers
     // Grammar: ? can call: [ SubjectDomainName ] | all,
     List(Vec<String>),
-    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
 }
 
@@ -403,6 +400,18 @@ impl<'de> Deserialize<'de> for CallRetPrivField {
         }
 
         deserializer.deserialize_any(CallRetPrivFieldVisitor)
+    }
+}
+
+impl Serialize for CallRetPrivField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            CallRetPrivField::List(calls) => calls.serialize(serializer), // Serialize as a plain list
+            CallRetPrivField::All => serializer.serialize_str("all"),    // Serialize "All" as a string
+        }
     }
 }
 
