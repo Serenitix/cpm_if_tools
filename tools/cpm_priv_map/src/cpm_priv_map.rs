@@ -35,6 +35,10 @@ impl CPMPrivMap {
         &self.object_map
     }
 
+    pub fn add_object_domain(&mut self, object_domain: ObjectDomain) {
+        self.object_map.push(object_domain);
+    }
+
     pub fn subject_map(&self) -> &Vec<SubjectDomain> {
         &self.subject_map
     }
@@ -308,15 +312,15 @@ impl SubjectDomain {
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Privilege {
-    principal: Principal,
+    pub principal: Principal,
     #[serde(default = "default_callret_priv_field")]
-    can_call: CallRetPrivField,    
+    pub can_call: CallRetPrivField,    
     #[serde(default = "default_callret_priv_field")]
-    can_return: CallRetPrivField,
+    pub can_return: CallRetPrivField,
     #[serde(default = "default_rw_priv_field")]
-    can_read: RWPrivField,
+    pub can_read: RWPrivField,
     #[serde(default = "default_rw_priv_field")]
-    can_write: RWPrivField,
+    pub can_write: RWPrivField,
 }
 
 impl Privilege {
@@ -471,9 +475,9 @@ pub struct Principal {
     //   well the grammar specifies it like this right now. so i will be 
     //   faithful to the grammar and propose changes after one version
     //subject: SubjectDomain,
-    subject: String,
+    pub subject: String,
     #[serde(default = "default_context_field")]
-    execution_context: ContextField,
+    pub execution_context: ContextField,
 }
 
 impl Principal {
