@@ -10,7 +10,7 @@ The **CPM Schema Validator** is a Rust-based tool designed to validate CPM polic
 
 ## Installation
 
-The tool is written in Rust, making it the sole depency.
+The tool is written in Rust, making it the sole dependency.
 Each of the following commands can be done in terminal or
 the included Makefile will invoke each accordingly.
 
