@@ -1,7 +1,7 @@
 [workspace]
 
 [package]
-name = "cpm_if_yaml_validator"
+name = "cpm_if"
 version = "0.1.0"
 edition = "2021"
 
