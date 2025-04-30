@@ -738,6 +738,18 @@ pub struct Object {
 }
 
 impl Object {
+    pub fn new(objects: Vec<String>) -> Self {
+	Self {
+	    objects: objects,
+	    object_context: ContextField::All,
+	}
+    }
+    pub fn new_empty_from_domain_name(name: String) -> Self {
+	Self {
+	    objects: vec![name],
+	    object_context: ContextField::All,
+	}
+    }
     pub fn objects(&self) -> &Vec<String> {
         &self.objects
     }
