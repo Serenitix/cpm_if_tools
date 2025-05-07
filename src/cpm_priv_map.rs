@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
-// 
+//
 // MIT License
-// 
+//
 // © 2024 Nathan Dautenhahn & Serenitix LLC
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
@@ -65,18 +65,27 @@ impl CPMPrivMap {
         &self.privileges
     }
 
-    pub fn save_to_yaml(&self, file_path: &str) -> 
-        Result<(), Box<dyn std::error::Error>> 
+    // According to if spec: Each object in a program must have its
+    // object ID included in at most one Object Domain. Currently
+    // object_id is the same value as the global's name which means
+    // this extra lookup work is unnecessary, but having this allows
+    // us to easily change this assumption in the future
+    pub fn get_object_domain_for_global(&self, name: &str, path: &str) -> Option<&ObjectDomain> {
+	self.object_map.iter().find(|od| od.find_object(Some(name), Some(path), None, None).is_some())
+    }
+
+    pub fn save_to_yaml(&self, file_path: &str) ->
+        Result<(), Box<dyn std::error::Error>>
     {
         // Serialize the CPMPrivMap to a YAML string
         let serialized_yaml = serde_yaml::to_string(self)?;
-        
+
         // Create or overwrite the file
         let mut file = File::create(file_path)?;
-        
+
         // Write the serialized YAML to the file
         file.write_all(serialized_yaml.as_bytes())?;
-        
+
         Ok(())
     }
 
@@ -123,6 +132,19 @@ impl ObjectDomain {
     }
     pub fn get_object_by_alloc_type(&self, alloc_type: &AllocType) -> Option<&ObjectID> {
         self.objects.iter().find(|o| o.alloc_type == *alloc_type)
+    }
+    pub fn find_object(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>) -> Option<&ObjectID> {
+	self.filter_objects(name, path, lineno, alloc_type)
+	    .into_iter()
+	    .next()
+    }
+    pub fn filter_objects(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>)-> Vec<&ObjectID> {
+	self.objects.iter().filter(|&o| {
+	    (name.is_none_or(|name| o.name == name)) &&
+		(path.is_none_or(|path| o.path == path)) &&
+		(lineno.is_none_or(|lineno| o.lineno == lineno)) &&
+		(alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
+	}).collect()
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -315,20 +337,20 @@ impl SubjectDomain {
 }
 
 /*
- * Grammar: 
- *      Privilege ::= { 
+ * Grammar:
+ *      Privilege ::= {
  *          principal: Principal,
  *          ? can_call: [ SubjectDomainName ] | all,
  *          ? can_return: [ SubjectDomainName ] | all,
  *          ? can_read: [ Object ] | all,
  *          ? can_write: [ Object ] | all,
- *      } 
+ *      }
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Privilege {
     pub principal: Principal,
     #[serde(default = "default_callret_priv_field")]
-    pub can_call: CallRetPrivField,    
+    pub can_call: CallRetPrivField,
     #[serde(default = "default_callret_priv_field")]
     pub can_return: CallRetPrivField,
     #[serde(default = "default_rw_priv_field")]
@@ -357,6 +379,7 @@ impl Privilege {
     pub fn can_write(&self) -> &RWPrivField {
         &self.can_write
     }
+
 }
 
 fn default_callret_priv_field() -> CallRetPrivField {
@@ -495,9 +518,9 @@ impl<'de> Deserialize<'de> for RWPrivField {
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Principal {
-    // TODO make this work correctly: point to a subject domain 
+    // TODO make this work correctly: point to a subject domain
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
-    //   well the grammar specifies it like this right now. so i will be 
+    //   well the grammar specifies it like this right now. so i will be
     //   faithful to the grammar and propose changes after one version
     //subject: SubjectDomain,
     pub subject: String,
@@ -526,10 +549,10 @@ fn default_context_field() -> ContextField {
 }
 
 /*
- * The context field is used for execution_context and object_context fields 
- * of the Principal and Object objects. The logic of the grammar allows for an 
- * optional context field that is either non-existent and defaults to "all" or 
- * as a context object. This enum allows for either a defined context or "all", 
+ * The context field is used for execution_context and object_context fields
+ * of the Principal and Object objects. The logic of the grammar allows for an
+ * optional context field that is either non-existent and defaults to "all" or
+ * as a context object. This enum allows for either a defined context or "all",
  * which then leads to simpler serialization and deserialization.
  */
 #[derive(Debug, Serialize, PartialEq)]
@@ -540,8 +563,8 @@ pub enum ContextField {
 }
 
 /*
- * The field may be: missing, "all", or a context object. 
- * Otherwise, match either the string "all" or a Context object. 
+ * The field may be: missing, "all", or a context object.
+ * Otherwise, match either the string "all" or a Context object.
  */
 impl<'de> Deserialize<'de> for ContextField {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -674,7 +697,7 @@ impl<'de> Deserialize<'de> for CallContextSubField {
 }
 
 fn default_context_simple() -> Option<ContextSimpleString> {
-    Some(ContextSimpleString::All) 
+    Some(ContextSimpleString::All)
 }
 
 #[derive(Debug, PartialEq)]
@@ -738,10 +761,10 @@ pub struct Object {
 }
 
 impl Object {
-    pub fn new(objects: Vec<String>) -> Self {
+    pub fn new(objs: Vec<String>) -> Self {
 	Self {
-	    objects: objects,
-	    object_context: ContextField::All,
+	    objects: objs,
+	    object_context: default_context_field(),
 	}
     }
     pub fn new_empty_from_domain_name(name: String) -> Self {
@@ -781,7 +804,7 @@ execution_context:
             }
         );
     }
-    
+
     #[test]
     fn test_deserialize_empty_object_context() {
         let yaml = r#"
@@ -956,7 +979,7 @@ object_context:
             "xdr_alloc_bvec", // Known allocator
             "unknown_allocator_2", // Unknown allocator
         ];
-    
+
         for allocator in allocators {
             let alloc_type: AllocType = allocator.parse().unwrap();
             if allocator.starts_with("unknown") {
