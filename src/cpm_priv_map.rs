@@ -458,10 +458,9 @@ fn default_rw_priv_field() -> RWPrivField {
     RWPrivField::All
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum RWPrivField {
     List(Vec<Object>),
-    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
 }
 
@@ -511,6 +510,19 @@ impl<'de> Deserialize<'de> for RWPrivField {
         deserializer.deserialize_any(RWPrivFieldVisitor)
     }
 }
+
+impl Serialize for RWPrivField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            RWPrivField::List(ref objects) => objects.serialize(serializer), // serialize Vec<Object>
+            RWPrivField::All => serializer.serialize_str("all"),    // Serialize "All" as a string
+        }
+    }
+}
+
 
 /*
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
