@@ -22,6 +22,12 @@ use std::fmt;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static DOMAIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
+fn next_domain_id(domain_type: &str) -> String {
+    format!("{}{}", domain_type, DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed)).to_string()
+}
 
 //pub mod object_id;
 
@@ -64,7 +70,9 @@ impl CPMPrivMap {
     pub fn privileges(&self) -> &Vec<Privilege> {
         &self.privileges
     }
-
+    pub fn add_privilege(&mut self, privilege: Privilege) {
+	self.privileges.push(privilege);
+    }
     // According to if spec: Each object in a program must have its
     // object ID included in at most one Object Domain. Currently
     // object_id is the same value as the global's name which means
@@ -91,6 +99,8 @@ impl CPMPrivMap {
 
 }
 
+static OBJECT_DOMAIN_NUM: &usize = &0;
+
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct ObjectDomain {
     name: String,
@@ -100,8 +110,11 @@ pub struct ObjectDomain {
 
 impl ObjectDomain {
 
-    pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
-        Self { name, objects }
+    pub fn new(objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("ObjectDomain"),
+	    objects,
+	}
     }
     pub fn new_empty(name: String) -> Self {
         Self { name, objects: vec![] }
@@ -311,8 +324,11 @@ pub struct SubjectDomain {
 
 impl SubjectDomain {
 
-    pub fn new(name: String, subjects: Vec<String>) -> Self {
-        Self { name, subjects }
+    pub fn new(subjects: Vec<String>) -> Self {
+        Self {
+	    name: next_domain_id("SubjectDomain"),
+	    subjects,
+	}
     }
 
     pub fn add_subject(&mut self, subject: String) {
@@ -462,6 +478,21 @@ fn default_rw_priv_field() -> RWPrivField {
 pub enum RWPrivField {
     List(Vec<Object>),
     All,
+}
+
+impl RWPrivField {
+    pub fn add_object(&mut self, object: Object) {
+	match self {
+	    RWPrivField::List(ref mut list) => list.push(object),
+	    RWPrivField::All => () // technically object is already included in All
+	}
+    }
+    pub fn contains_domain(&self, domain: &str) -> bool {
+	match self {
+	    RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
+	    RWPrivField::All => true,
+	}
+    }
 }
 
 impl<'de> Deserialize<'de> for RWPrivField {
@@ -1055,7 +1086,6 @@ object_context:
             result,
             CPMPrivMap {
                 object_map: vec![ObjectDomain::new(
-                    "domain1".to_string(),
                     vec![
                         ObjectID::new(
                             AllocType::Other, // Default alloc_type for fallback
@@ -1132,7 +1162,6 @@ privileges:
 
         // Populate the CPMPrivMap with example data
         cpm_pmap.object_map.push(ObjectDomain::new(
-            "domain1".to_string(),
             vec![
                 ObjectID::new(
                     AllocType::Global,
