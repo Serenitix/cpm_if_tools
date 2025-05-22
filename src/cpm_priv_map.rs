@@ -50,6 +50,8 @@ pub struct CPMPrivMapContainer {
     domain_alias_map: HashMap<String, HashSet<String>>,
     // map of the reverse: alias to set of domain names
     alias_domain_map: HashMap<String, HashSet<String>>,
+    // map of (path, fn name) -> name of locals/params domain
+    function_local_domain_map: HashMap<(String, String), String>,
 }
 
 impl CPMPrivMapContainer {
@@ -58,9 +60,10 @@ impl CPMPrivMapContainer {
 	    cpm_priv_map: CPMPrivMap::new(),
 	    domain_alias_map: HashMap::new(),
 	    alias_domain_map: HashMap::new(),
+	    function_local_domain_map: HashMap::new(),
 	}
     }
-    pub fn add_global(&mut self, global_name: &String, file: String, alias: String) {
+    pub fn add_global(&mut self, global_name: String, file: String, alias: String) {
 	// create new objectdomain for global
 	let domain = ObjectDomain::new_global(
 	    global_name.as_str(),
@@ -75,23 +78,35 @@ impl CPMPrivMapContainer {
 	);
 
 	// append the global's domain name to the corresponding alias map entry
-	self.update_alias_map(alias.to_string(), domain.name().to_string());
+	self.update_alias_maps(alias.to_string(), domain.name().to_string());
 
 	// add object domain to priv map
 	self.cpm_priv_map.add_object_domain(domain);
+    }
+
+    pub fn get_fn_locals_alias_domain_names(&mut self, fn_name: String, fn_path: String) -> Vec<String> {
+	self.function_local_domain_map.get(&(fn_name, fn_path)) // lookup domain name corresponding to fn/path
+	    .map(|d| self.domain_alias_map.get(d) //if sucessful, lookup corresponding aliases (including locals/params)
+		 .unwrap_or(&HashSet::new()).iter().map(|s| s.to_string()).collect::<Vec<String>>()) // convert result to list
+	    .unwrap_or_default() // return empty list if fn/path domain lookup fails
 
     }
-    pub fn add_local(&mut self, locals_domain: ObjectDomain, aliases: &Vec<String>) {
+
+    pub fn add_local(&mut self, fn_name: String, fn_path: String, locals_domain: ObjectDomain, aliases: &Vec<String>) {
 
 	// add domain to all corresponding alias map entries
 	for alias in aliases {
-	    self.update_alias_map(alias.to_string(), locals_domain.name().to_string());
+	    self.update_alias_maps(alias.to_string(), locals_domain.name().to_string());
 	}
+
+	// add too function_local_domain_map
+	self.function_local_domain_map.insert((fn_name.to_string(), fn_path.to_string()),
+					      locals_domain.name().to_string());
 
 	// add object domain to priv map
 	self.cpm_priv_map.add_object_domain(locals_domain);
-
     }
+
     pub fn add_alloc(&mut self, alloc_fn: String, file: String, line: String, aliases: &Vec<String>) {
 	// create new objectdomain for allocation
 	let domain = ObjectDomain::new_alloc(
@@ -108,14 +123,15 @@ impl CPMPrivMapContainer {
 
 	// add domain to all corresponding alias map entries
 	for alias in aliases {
-	    self.update_alias_map(alias.to_string(), domain.name().to_string());
+	    self.update_alias_maps(alias.to_string(), domain.name().to_string());
 	}
 
 	// add object domain to cpm_priv_map
 	self.cpm_priv_map.add_object_domain(domain);
     }
 
-    fn update_alias_map(&mut self, alias: String, domain_name: String) {
+    // add alias/domain name pair to domain <-> alias maps
+    fn update_alias_maps(&mut self, alias: String, domain_name: String) {
 	match self.domain_alias_map.get_mut(&alias) {
 	    Some(e) => {
 		e.insert(domain_name.clone());
@@ -138,15 +154,16 @@ impl CPMPrivMapContainer {
 	}
     }
 
+    // lookup list of domain names corresponding to list of aliases
     pub fn get_domains_for_aliases(&self, aliases: Vec<String>) -> Vec<String> {
 	aliases.iter()
-	    .flat_map(|alias|
+	    .flat_map(|alias| // iterate over aliases, flatten resulting vector of vectors
 		      self.alias_domain_map
-		      .get(alias)
+		      .get(alias) // lookup domain for alias
 		      .unwrap_or(&HashSet::new())
 		      .iter()
-		      .map(|s| s.to_string())
-		      .collect::<Vec<_>>()
+		      .map(|s| s.to_string()) // copy to new string iter
+		      .collect::<Vec<_>>() // collect into vector
 	).collect()
     }
 
@@ -158,25 +175,24 @@ impl CPMPrivMapContainer {
 	self.cpm_priv_map.add_privilege(privilege);
     }
 
+
     pub fn get_all_domains_for_global(&self, name: &str, path: &str) -> Vec<String> {
 	self.cpm_priv_map
-	    .get_object_domain_for_global(name, path)
-	    .map(|object_domain|
+	    .get_object_domain_for_global(name, path) // lookup global's ObjectDomain
+	    .map(|object_domain| // if sucessful
 		 self.domain_alias_map
-		 .get(object_domain.name())
+		 .get(object_domain.name()) // lookup corresponding aliases
 		 .map(|res| res
 		      .iter()
 		      .map(|s| s.to_string())
-		      .collect::<Vec<String>>())
-		 .unwrap_or_default()
+		      .collect::<Vec<String>>()) // copy into vector
+		 .unwrap_or_default() // unwrap result or vec![]
 		 .iter()
-		 .flat_map(|dn| self.alias_domain_map.get(dn)
-			   .map_or(vec![], |res| res.iter().collect()))
-		 .map(|s| s.to_string())
-		 .collect::<Vec<String>>())
-	    .unwrap_or_default()
-	    .into_iter()
-	    .collect::<Vec<String>>()
+		 .flat_map(|dn| self.alias_domain_map.get(dn) // for each alias, lookup coresponding domain names
+			   .map_or(vec![], |res| res.iter().collect())) //convert to vector and flatten
+		 .map(|s| s.to_string()) // copy strings
+		 .collect::<Vec<String>>()) //convert to vector
+	    .unwrap_or_default() // return vec![] if global domain lookup fails
     }
 
     pub fn save_to_yaml(&self, file_path: &str) ->
