@@ -19,20 +19,172 @@ use serde::de::{self, Visitor};
 use serde::ser::Serializer;
 use std::char::ToUppercase;
 use std::fmt;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+
 use std::fs::File;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static DOMAIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn next_domain_id(domain_type: &str) -> String {
-    format!("{}{}", domain_type, DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed)).to_string()
+fn next_domain_id(domain_type: &str, suffix: Option<&str>) -> String {
+
+    let mut prefix = format!("{domain_type}{}", DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed));
+    // append dot and suffix or empty string
+    prefix.push_str(
+	suffix.map(|s| format!(".{s}"))
+	    .unwrap_or_default()
+	    .as_str()
+    );
+    prefix.clone()
 }
 
 //pub mod object_id;
 
 //use object_identifer::ObjectID;
 // TODO make sure to specify yaml serialization and deserialization
+
+
+pub struct CPMPrivMapContainer {
+    pub cpm_priv_map: CPMPrivMap,
+    // map from domain name to a set of aliases
+    domain_alias_map: HashMap<String, HashSet<String>>,
+    // map of the reverse: alias to set of domain names
+    alias_domain_map: HashMap<String, HashSet<String>>,
+}
+
+impl CPMPrivMapContainer {
+    pub fn new() -> Self {
+	Self {
+	    cpm_priv_map: CPMPrivMap::new(),
+	    domain_alias_map: HashMap::new(),
+	    alias_domain_map: HashMap::new(),
+	}
+    }
+    pub fn add_global(&mut self, global_name: &String, file: String, alias: String) {
+	// create new objectdomain for global
+	let domain = ObjectDomain::new_global(
+	    global_name.as_str(),
+	    vec![
+		ObjectID::new(
+		    AllocType::Global,
+		    file.to_string(),
+		    "".to_string(),
+		    global_name.to_string(),
+		)
+	    ]
+	);
+
+	// append the global's domain name to the corresponding alias map entry
+	self.update_alias_map(alias.to_string(), domain.name().to_string());
+
+	// add object domain to priv map
+	self.cpm_priv_map.add_object_domain(domain);
+
+    }
+    pub fn add_local(&mut self, locals_domain: ObjectDomain, aliases: &Vec<String>) {
+
+	// add domain to all corresponding alias map entries
+	for alias in aliases {
+	    self.update_alias_map(alias.to_string(), locals_domain.name().to_string());
+	}
+
+	// add object domain to priv map
+	self.cpm_priv_map.add_object_domain(locals_domain);
+
+    }
+    pub fn add_alloc(&mut self, alloc_fn: String, file: String, line: String, aliases: &Vec<String>) {
+	// create new objectdomain for allocation
+	let domain = ObjectDomain::new_alloc(
+	    alloc_fn.as_str(),
+	    vec![
+		ObjectID::new(
+		    AllocType::Heap,
+		    file.to_string(),
+		    line.to_string(),
+		    "".to_string(),
+		)
+	    ]
+	);
+
+	// add domain to all corresponding alias map entries
+	for alias in aliases {
+	    self.update_alias_map(alias.to_string(), domain.name().to_string());
+	}
+
+	// add object domain to cpm_priv_map
+	self.cpm_priv_map.add_object_domain(domain);
+    }
+
+    fn update_alias_map(&mut self, alias: String, domain_name: String) {
+	match self.domain_alias_map.get_mut(&alias) {
+	    Some(e) => {
+		e.insert(domain_name.clone());
+	    },
+	    None => {
+		let mut newset = HashSet::new();
+		newset.insert(domain_name.clone());
+		self.domain_alias_map.insert(alias.clone(), newset);
+	    }
+	}
+	match self.alias_domain_map.get_mut(&domain_name) {
+	    Some(e) => {
+		e.insert(alias.clone());
+	    },
+	    None => {
+		let mut newset = HashSet::new();
+		newset.insert(alias.clone());
+		self.domain_alias_map.insert(domain_name.clone(), newset);
+	    }
+	}
+    }
+
+    pub fn get_domains_for_aliases(&self, aliases: Vec<String>) -> Vec<String> {
+	aliases.iter()
+	    .flat_map(|alias|
+		      self.alias_domain_map
+		      .get(alias)
+		      .unwrap_or(&HashSet::new())
+		      .iter()
+		      .map(|s| s.to_string())
+		      .collect::<Vec<_>>()
+	).collect()
+    }
+
+    pub fn add_subject_domain(&mut self, domain: SubjectDomain) {
+        self.cpm_priv_map.add_subject_domain(domain);
+    }
+
+    pub fn add_privilege(&mut self, privilege: Privilege) {
+	self.cpm_priv_map.add_privilege(privilege);
+    }
+
+    pub fn get_all_domains_for_global(&self, name: &str, path: &str) -> Vec<String> {
+	self.cpm_priv_map
+	    .get_object_domain_for_global(name, path)
+	    .map(|object_domain|
+		 self.domain_alias_map
+		 .get(object_domain.name())
+		 .map(|res| res
+		      .iter()
+		      .map(|s| s.to_string())
+		      .collect::<Vec<String>>())
+		 .unwrap_or_default()
+		 .iter()
+		 .flat_map(|dn| self.alias_domain_map.get(dn)
+			   .map_or(vec![], |res| res.iter().collect()))
+		 .map(|s| s.to_string())
+		 .collect::<Vec<String>>())
+	    .unwrap_or_default()
+	    .into_iter()
+	    .collect::<Vec<String>>()
+    }
+
+    pub fn save_to_yaml(&self, file_path: &str) ->
+        Result<(), Box<dyn std::error::Error>>
+    {
+	self.cpm_priv_map.save_to_yaml(file_path)
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct CPMPrivMap {
@@ -73,11 +225,7 @@ impl CPMPrivMap {
     pub fn add_privilege(&mut self, privilege: Privilege) {
 	self.privileges.push(privilege);
     }
-    // According to if spec: Each object in a program must have its
-    // object ID included in at most one Object Domain. Currently
-    // object_id is the same value as the global's name which means
-    // this extra lookup work is unnecessary, but having this allows
-    // us to easily change this assumption in the future
+
     pub fn get_object_domain_for_global(&self, name: &str, path: &str) -> Option<&ObjectDomain> {
 	self.object_map.iter().find(|od| od.find_object(Some(name), Some(path), None, None).is_some())
     }
@@ -110,14 +258,29 @@ pub struct ObjectDomain {
 
 impl ObjectDomain {
 
-    pub fn new(objects: Vec<ObjectID>) -> Self {
+    pub fn new_local(fn_name: &str, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("ObjectDomain"),
+	    name: next_domain_id("ObjectDomain", Some(fn_name)),
+	    objects,
+	}
+    }
+    pub fn new_alloc(fn_name: &str, objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("HeapObjectDomain", Some(fn_name)),
+	    objects,
+	}
+    }
+    pub fn new_global(global_name: &str, objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("GlobalObjectDomain", Some(global_name)),
 	    objects,
 	}
     }
     pub fn new_empty(name: String) -> Self {
-        Self { name, objects: vec![] }
+        Self {
+	    name: next_domain_id("ObjectDomain", Some(name.as_str())),
+	    objects: vec![]
+	}
     }
     pub fn add_object(&mut self, object: ObjectID) {
         self.objects.push(object);
@@ -324,9 +487,9 @@ pub struct SubjectDomain {
 
 impl SubjectDomain {
 
-    pub fn new(subjects: Vec<String>) -> Self {
+    pub fn new(fn_name: &str, subjects: Vec<String>) -> Self {
         Self {
-	    name: next_domain_id("SubjectDomain"),
+	    name: next_domain_id("SubjectDomain", Some(fn_name)),
 	    subjects,
 	}
     }
