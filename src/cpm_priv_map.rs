@@ -26,16 +26,10 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static DOMAIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn next_domain_id(domain_type: &str, suffix: Option<&str>) -> String {
-
-    let mut prefix = format!("{domain_type}{}", DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed));
-    // append dot and suffix or empty string
-    prefix.push_str(
-	suffix.map(|s| format!(".{s}"))
-	    .unwrap_or_default()
-	    .as_str()
-    );
-    prefix.clone()
+fn next_domain_id(domain_type: String, suffix: Option<String>) -> String {
+    format!("{}{}{}", domain_type,
+	    DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed),
+	    suffix.map(|s| format!(".{}", s).to_string()).unwrap_or_default()).to_string()
 }
 
 //pub mod object_id;
@@ -66,7 +60,7 @@ impl CPMPrivMapContainer {
     pub fn add_global(&mut self, global_name: String, file: String, alias: String) {
 	// create new objectdomain for global
 	let domain = ObjectDomain::new_global(
-	    global_name.as_str(),
+	    global_name.to_string(),
 	    vec![
 		ObjectID::new(
 		    AllocType::Global,
@@ -110,7 +104,7 @@ impl CPMPrivMapContainer {
     pub fn add_alloc(&mut self, alloc_fn: String, file: String, line: String, aliases: &Vec<String>) {
 	// create new objectdomain for allocation
 	let domain = ObjectDomain::new_alloc(
-	    alloc_fn.as_str(),
+	    alloc_fn.to_string(),
 	    vec![
 		ObjectID::new(
 		    AllocType::Heap,
@@ -132,26 +126,22 @@ impl CPMPrivMapContainer {
 
     // add alias/domain name pair to domain <-> alias maps
     fn update_alias_maps(&mut self, alias: String, domain_name: String) {
-	match self.domain_alias_map.get_mut(&alias) {
+	let insert = |key: String, value: String, map: &mut HashMap<String, HashSet<String>>| {
+	match map.get_mut(&key) {
 	    Some(e) => {
-		e.insert(domain_name.clone());
+		e.insert(value.clone());
 	    },
 	    None => {
 		let mut newset = HashSet::new();
-		newset.insert(domain_name.clone());
-		self.domain_alias_map.insert(alias.clone(), newset);
+		newset.insert(value.clone());
+		map.insert(key.to_string(), newset);
 	    }
 	}
-	match self.alias_domain_map.get_mut(&domain_name) {
-	    Some(e) => {
-		e.insert(alias.clone());
-	    },
-	    None => {
-		let mut newset = HashSet::new();
-		newset.insert(alias.clone());
-		self.domain_alias_map.insert(domain_name.clone(), newset);
-	    }
-	}
+
+	};
+	insert(alias.to_string(), domain_name.to_string(), &mut self.alias_domain_map);
+	insert(domain_name.to_string(), alias.to_string(), &mut self.domain_alias_map);
+
     }
 
     // lookup list of domain names corresponding to list of aliases
@@ -274,27 +264,27 @@ pub struct ObjectDomain {
 
 impl ObjectDomain {
 
-    pub fn new_local(fn_name: &str, objects: Vec<ObjectID>) -> Self {
+    pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("ObjectDomain", Some(fn_name)),
+	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
 	    objects,
 	}
     }
-    pub fn new_alloc(fn_name: &str, objects: Vec<ObjectID>) -> Self {
+    pub fn new_alloc(fn_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("HeapObjectDomain", Some(fn_name)),
+	    name: next_domain_id("HeapObjectDomain".to_string(), Some(fn_name)),
 	    objects,
 	}
     }
-    pub fn new_global(global_name: &str, objects: Vec<ObjectID>) -> Self {
+    pub fn new_global(global_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("GlobalObjectDomain", Some(global_name)),
+	    name: next_domain_id("GlobalObjectDomain".to_string(), Some(global_name)),
 	    objects,
 	}
     }
     pub fn new_empty(name: String) -> Self {
         Self {
-	    name: next_domain_id("ObjectDomain", Some(name.as_str())),
+	    name: next_domain_id("ObjectDomain".to_string(), Some(name)),
 	    objects: vec![]
 	}
     }
@@ -503,9 +493,9 @@ pub struct SubjectDomain {
 
 impl SubjectDomain {
 
-    pub fn new(fn_name: &str, subjects: Vec<String>) -> Self {
+    pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
-	    name: next_domain_id("SubjectDomain", Some(fn_name)),
+	    name: next_domain_id("SubjectDomain".to_string(), Some(fn_name)),
 	    subjects,
 	}
     }
