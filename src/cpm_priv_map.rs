@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
-// 
+//
 // MIT License
-// 
+//
 // © 2024 Nathan Dautenhahn & Serenitix LLC
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
 // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
 
@@ -19,14 +19,178 @@ use serde::de::{self, Visitor};
 use serde::ser::Serializer;
 use std::char::ToUppercase;
 use std::fmt;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+
 use std::fs::File;
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static DOMAIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
+fn next_domain_id(domain_type: String, suffix: Option<String>) -> String {
+    format!("{}{}{}", domain_type,
+	    DOMAIN_COUNTER.fetch_add(1, Ordering::Relaxed),
+	    suffix.map(|s| format!(".{}", s).to_string()).unwrap_or_default()).to_string()
+}
 
 //pub mod object_id;
 
 //use object_identifer::ObjectID;
 // TODO make sure to specify yaml serialization and deserialization
+
+
+pub struct CPMPrivMapContainer {
+    pub cpm_priv_map: CPMPrivMap,
+    // map from domain name to a set of aliases
+    domain_alias_map: HashMap<String, HashSet<String>>,
+    // map of the reverse: alias to set of domain names
+    alias_domain_map: HashMap<String, HashSet<String>>,
+    // map of (path, fn name) -> name of locals/params domain
+    function_local_domain_map: HashMap<(String, String), String>,
+}
+
+impl CPMPrivMapContainer {
+    pub fn new() -> Self {
+	Self {
+	    cpm_priv_map: CPMPrivMap::new(),
+	    domain_alias_map: HashMap::new(),
+	    alias_domain_map: HashMap::new(),
+	    function_local_domain_map: HashMap::new(),
+	}
+    }
+    pub fn add_global(&mut self, global_name: String, file: String, alias: String) {
+	// create new objectdomain for global
+	let domain = ObjectDomain::new_global(
+	    global_name.to_string(),
+	    vec![
+		ObjectID::new(
+		    AllocType::Global,
+		    file.to_string(),
+		    "".to_string(),
+		    global_name.to_string(),
+		)
+	    ]
+	);
+
+	// append the global's domain name to the corresponding alias map entry
+	self.update_alias_maps(alias.to_string(), domain.name().to_string());
+
+	// add object domain to priv map
+	self.cpm_priv_map.add_object_domain(domain);
+    }
+
+    pub fn get_fn_locals_alias_domain_names(&mut self, fn_name: String, fn_path: String) -> Vec<String> {
+	self.function_local_domain_map.get(&(fn_name, fn_path)) // lookup domain name corresponding to fn/path
+	    .map(|d| self.domain_alias_map.get(d) //if sucessful, lookup corresponding aliases (including locals/params)
+		 .unwrap_or(&HashSet::new()).iter().map(|s| s.to_string()).collect::<Vec<String>>()) // convert result to list
+	    .unwrap_or_default() // return empty list if fn/path domain lookup fails
+
+    }
+
+    pub fn add_local(&mut self, fn_name: String, fn_path: String, locals_domain: ObjectDomain, aliases: &Vec<String>) {
+
+	// add domain to all corresponding alias map entries
+	for alias in aliases {
+	    self.update_alias_maps(alias.to_string(), locals_domain.name().to_string());
+	}
+
+	// add too function_local_domain_map
+	self.function_local_domain_map.insert((fn_name.to_string(), fn_path.to_string()),
+					      locals_domain.name().to_string());
+
+	// add object domain to priv map
+	self.cpm_priv_map.add_object_domain(locals_domain);
+    }
+
+    pub fn add_alloc(&mut self, alloc_fn: String, file: String, line: String, aliases: &Vec<String>) {
+	// create new objectdomain for allocation
+	let domain = ObjectDomain::new_alloc(
+	    alloc_fn.to_string(),
+	    vec![
+		ObjectID::new(
+		    AllocType::Heap,
+		    file.to_string(),
+		    line.to_string(),
+		    "".to_string(),
+		)
+	    ]
+	);
+
+	// add domain to all corresponding alias map entries
+	for alias in aliases {
+	    self.update_alias_maps(alias.to_string(), domain.name().to_string());
+	}
+
+	// add object domain to cpm_priv_map
+	self.cpm_priv_map.add_object_domain(domain);
+    }
+
+    // add alias/domain name pair to domain <-> alias maps
+    fn update_alias_maps(&mut self, alias: String, domain_name: String) {
+	let insert = |key: String, value: String, map: &mut HashMap<String, HashSet<String>>| {
+	match map.get_mut(&key) {
+	    Some(e) => {
+		e.insert(value.clone());
+	    },
+	    None => {
+		let mut newset = HashSet::new();
+		newset.insert(value.clone());
+		map.insert(key.to_string(), newset);
+	    }
+	}
+
+	};
+	insert(alias.to_string(), domain_name.to_string(), &mut self.alias_domain_map);
+	insert(domain_name.to_string(), alias.to_string(), &mut self.domain_alias_map);
+
+    }
+
+    // lookup list of domain names corresponding to list of aliases
+    pub fn get_domains_for_aliases(&self, aliases: Vec<String>) -> Vec<String> {
+	aliases.iter()
+	    .flat_map(|alias| // iterate over aliases, flatten resulting vector of vectors
+		      self.alias_domain_map
+		      .get(alias) // lookup domain for alias
+		      .unwrap_or(&HashSet::new())
+		      .iter()
+		      .map(|s| s.to_string()) // copy to new string iter
+		      .collect::<Vec<_>>() // collect into vector
+	).collect()
+    }
+
+    pub fn add_subject_domain(&mut self, domain: SubjectDomain) {
+        self.cpm_priv_map.add_subject_domain(domain);
+    }
+
+    pub fn add_privilege(&mut self, privilege: Privilege) {
+	self.cpm_priv_map.add_privilege(privilege);
+    }
+
+
+    pub fn get_all_domains_for_global(&self, name: &str, path: &str) -> Vec<String> {
+	self.cpm_priv_map
+	    .get_object_domain_for_global(name, path) // lookup global's ObjectDomain
+	    .map(|object_domain| // if sucessful
+		 self.domain_alias_map
+		 .get(object_domain.name()) // lookup corresponding aliases
+		 .map(|res| res
+		      .iter()
+		      .map(|s| s.to_string())
+		      .collect::<Vec<String>>()) // copy into vector
+		 .unwrap_or_default() // unwrap result or vec![]
+		 .iter()
+		 .flat_map(|dn| self.alias_domain_map.get(dn) // for each alias, lookup coresponding domain names
+			   .map_or(vec![], |res| res.iter().collect())) //convert to vector and flatten
+		 .map(|s| s.to_string()) // copy strings
+		 .collect::<Vec<String>>()) //convert to vector
+	    .unwrap_or_default() // return vec![] if global domain lookup fails
+    }
+
+    pub fn save_to_yaml(&self, file_path: &str) ->
+        Result<(), Box<dyn std::error::Error>>
+    {
+	self.cpm_priv_map.save_to_yaml(file_path)
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct CPMPrivMap {
@@ -64,23 +228,32 @@ impl CPMPrivMap {
     pub fn privileges(&self) -> &Vec<Privilege> {
         &self.privileges
     }
+    pub fn add_privilege(&mut self, privilege: Privilege) {
+	self.privileges.push(privilege);
+    }
 
-    pub fn save_to_yaml(&self, file_path: &str) -> 
-        Result<(), Box<dyn std::error::Error>> 
+    pub fn get_object_domain_for_global(&self, name: &str, path: &str) -> Option<&ObjectDomain> {
+	self.object_map.iter().find(|od| od.find_object(Some(name), Some(path), None, None).is_some())
+    }
+
+    pub fn save_to_yaml(&self, file_path: &str) ->
+        Result<(), Box<dyn std::error::Error>>
     {
         // Serialize the CPMPrivMap to a YAML string
         let serialized_yaml = serde_yaml::to_string(self)?;
-        
+
         // Create or overwrite the file
         let mut file = File::create(file_path)?;
-        
+
         // Write the serialized YAML to the file
         file.write_all(serialized_yaml.as_bytes())?;
-        
+
         Ok(())
     }
 
 }
+
+static OBJECT_DOMAIN_NUM: &usize = &0;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct ObjectDomain {
@@ -92,10 +265,33 @@ pub struct ObjectDomain {
 impl ObjectDomain {
 
     pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
+        // TODO: Add check for duplicate domain creation
         Self { name, objects }
     }
+
+    pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
+	    objects,
+	}
+    }
+    pub fn new_alloc(fn_name: String, objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("HeapObjectDomain".to_string(), Some(fn_name)),
+	    objects,
+	}
+    }
+    pub fn new_global(global_name: String, objects: Vec<ObjectID>) -> Self {
+        Self {
+	    name: next_domain_id("GlobalObjectDomain".to_string(), Some(global_name)),
+	    objects,
+	}
+    }
     pub fn new_empty(name: String) -> Self {
-        Self { name, objects: vec![] }
+        Self {
+	    name: next_domain_id("ObjectDomain".to_string(), Some(name)),
+	    objects: vec![]
+	}
     }
     pub fn add_object(&mut self, object: ObjectID) {
         self.objects.push(object);
@@ -124,6 +320,19 @@ impl ObjectDomain {
     pub fn get_object_by_alloc_type(&self, alloc_type: &AllocType) -> Option<&ObjectID> {
         self.objects.iter().find(|o| o.alloc_type == *alloc_type)
     }
+    pub fn find_object(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>) -> Option<&ObjectID> {
+	self.filter_objects(name, path, lineno, alloc_type)
+	    .into_iter()
+	    .next()
+    }
+    pub fn filter_objects(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>)-> Vec<&ObjectID> {
+	self.objects.iter().filter(|&o| {
+	    (name.is_none_or(|name| o.name == name)) &&
+		(path.is_none_or(|path| o.path == path)) &&
+		(lineno.is_none_or(|lineno| o.lineno == lineno)) &&
+		(alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
+	}).collect()
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -142,6 +351,7 @@ pub struct ObjectID {
 }
 
 impl ObjectID {
+
     pub fn new(alloc_type: AllocType, path: String, lineno: String, name: String) -> Self {
         Self {
             alloc_type,
@@ -289,8 +499,11 @@ pub struct SubjectDomain {
 
 impl SubjectDomain {
 
-    pub fn new(name: String, subjects: Vec<String>) -> Self {
-        Self { name, subjects }
+    pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
+        Self {
+	    name: next_domain_id("SubjectDomain".to_string(), Some(fn_name)),
+	    subjects,
+	}
     }
 
     pub fn add_subject(&mut self, subject: String) {
@@ -315,20 +528,20 @@ impl SubjectDomain {
 }
 
 /*
- * Grammar: 
- *      Privilege ::= { 
+ * Grammar:
+ *      Privilege ::= {
  *          principal: Principal,
  *          ? can_call: [ SubjectDomainName ] | all,
  *          ? can_return: [ SubjectDomainName ] | all,
  *          ? can_read: [ Object ] | all,
  *          ? can_write: [ Object ] | all,
- *      } 
+ *      }
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Privilege {
     pub principal: Principal,
     #[serde(default = "default_callret_priv_field")]
-    pub can_call: CallRetPrivField,    
+    pub can_call: CallRetPrivField,
     #[serde(default = "default_callret_priv_field")]
     pub can_return: CallRetPrivField,
     #[serde(default = "default_rw_priv_field")]
@@ -357,6 +570,7 @@ impl Privilege {
     pub fn can_write(&self) -> &RWPrivField {
         &self.can_write
     }
+
 }
 
 fn default_callret_priv_field() -> CallRetPrivField {
@@ -435,11 +649,25 @@ fn default_rw_priv_field() -> RWPrivField {
     RWPrivField::All
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum RWPrivField {
     List(Vec<Object>),
-    #[serde(rename = "all")] // Serialize/deserialize "All" as "all"
     All,
+}
+
+impl RWPrivField {
+    pub fn add_object(&mut self, object: Object) {
+	match self {
+	    RWPrivField::List(ref mut list) => list.push(object),
+	    RWPrivField::All => () // technically object is already included in All
+	}
+    }
+    pub fn contains_domain(&self, domain: &str) -> bool {
+	match self {
+	    RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
+	    RWPrivField::All => true,
+	}
+    }
 }
 
 impl<'de> Deserialize<'de> for RWPrivField {
@@ -489,15 +717,28 @@ impl<'de> Deserialize<'de> for RWPrivField {
     }
 }
 
+impl Serialize for RWPrivField {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            RWPrivField::List(ref objects) => objects.serialize(serializer), // serialize Vec<Object>
+            RWPrivField::All => serializer.serialize_str("all"),    // Serialize "All" as a string
+        }
+    }
+}
+
+
 /*
  * Principal ::= { subject: SubjectDomain, ? execution context: Context | all }
  *   - if field missing, default to all, if it is then parse to all or Context
  */
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Principal {
-    // TODO make this work correctly: point to a subject domain 
+    // TODO make this work correctly: point to a subject domain
     //   eg: subject: SubjectDomain, // but a reference to a subject domain
-    //   well the grammar specifies it like this right now. so i will be 
+    //   well the grammar specifies it like this right now. so i will be
     //   faithful to the grammar and propose changes after one version
     //subject: SubjectDomain,
     pub subject: String,
@@ -526,10 +767,10 @@ fn default_context_field() -> ContextField {
 }
 
 /*
- * The context field is used for execution_context and object_context fields 
- * of the Principal and Object objects. The logic of the grammar allows for an 
- * optional context field that is either non-existent and defaults to "all" or 
- * as a context object. This enum allows for either a defined context or "all", 
+ * The context field is used for execution_context and object_context fields
+ * of the Principal and Object objects. The logic of the grammar allows for an
+ * optional context field that is either non-existent and defaults to "all" or
+ * as a context object. This enum allows for either a defined context or "all",
  * which then leads to simpler serialization and deserialization.
  */
 #[derive(Debug, Serialize, PartialEq)]
@@ -540,8 +781,8 @@ pub enum ContextField {
 }
 
 /*
- * The field may be: missing, "all", or a context object. 
- * Otherwise, match either the string "all" or a Context object. 
+ * The field may be: missing, "all", or a context object.
+ * Otherwise, match either the string "all" or a Context object.
  */
 impl<'de> Deserialize<'de> for ContextField {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -674,7 +915,7 @@ impl<'de> Deserialize<'de> for CallContextSubField {
 }
 
 fn default_context_simple() -> Option<ContextSimpleString> {
-    Some(ContextSimpleString::All) 
+    Some(ContextSimpleString::All)
 }
 
 #[derive(Debug, PartialEq)]
@@ -738,6 +979,18 @@ pub struct Object {
 }
 
 impl Object {
+    pub fn new(objs: Vec<String>) -> Self {
+	Self {
+	    objects: objs,
+	    object_context: default_context_field(),
+	}
+    }
+    pub fn new_empty_from_domain_name(name: String) -> Self {
+	Self {
+	    objects: vec![name],
+	    object_context: ContextField::All,
+	}
+    }
     pub fn objects(&self) -> &Vec<String> {
         &self.objects
     }
@@ -769,7 +1022,7 @@ execution_context:
             }
         );
     }
-    
+
     #[test]
     fn test_deserialize_empty_object_context() {
         let yaml = r#"
@@ -944,7 +1197,7 @@ object_context:
             "xdr_alloc_bvec", // Known allocator
             "unknown_allocator_2", // Unknown allocator
         ];
-    
+
         for allocator in allocators {
             let alloc_type: AllocType = allocator.parse().unwrap();
             if allocator.starts_with("unknown") {
@@ -1007,8 +1260,7 @@ object_context:
         assert_eq!(
             result,
             CPMPrivMap {
-                object_map: vec![ObjectDomain::new(
-                    "domain1".to_string(),
+                object_map: vec![ObjectDomain::new( "domain1".to_string(),
                     vec![
                         ObjectID::new(
                             AllocType::Other, // Default alloc_type for fallback
@@ -1084,8 +1336,7 @@ privileges:
         let mut cpm_pmap = CPMPrivMap::new();
 
         // Populate the CPMPrivMap with example data
-        cpm_pmap.object_map.push(ObjectDomain::new(
-            "domain1".to_string(),
+        cpm_pmap.object_map.push(ObjectDomain::new( "hi".to_string(),
             vec![
                 ObjectID::new(
                     AllocType::Global,
