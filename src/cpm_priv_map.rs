@@ -264,6 +264,11 @@ pub struct ObjectDomain {
 
 impl ObjectDomain {
 
+    pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
+        // TODO: Add check for duplicate domain creation
+        Self { name, objects }
+    }
+
     pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
 	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
@@ -346,6 +351,7 @@ pub struct ObjectID {
 }
 
 impl ObjectID {
+
     pub fn new(alloc_type: AllocType, path: String, lineno: String, name: String) -> Self {
         Self {
             alloc_type,
@@ -1254,7 +1260,7 @@ object_context:
         assert_eq!(
             result,
             CPMPrivMap {
-                object_map: vec![ObjectDomain::new(
+                object_map: vec![ObjectDomain::new( "domain1".to_string(),
                     vec![
                         ObjectID::new(
                             AllocType::Other, // Default alloc_type for fallback
@@ -1330,7 +1336,7 @@ privileges:
         let mut cpm_pmap = CPMPrivMap::new();
 
         // Populate the CPMPrivMap with example data
-        cpm_pmap.object_map.push(ObjectDomain::new(
+        cpm_pmap.object_map.push(ObjectDomain::new( "hi".to_string(),
             vec![
                 ObjectID::new(
                     AllocType::Global,
