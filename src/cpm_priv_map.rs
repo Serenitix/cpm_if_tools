@@ -93,7 +93,7 @@ impl CPMPrivMapContainer {
 	    self.update_alias_maps(alias.to_string(), locals_domain.name().to_string());
 	}
 
-	// add too function_local_domain_map
+	// add to function_local_domain_map
 	self.function_local_domain_map.insert((fn_name.to_string(), fn_path.to_string()),
 					      locals_domain.name().to_string());
 
@@ -271,7 +271,7 @@ impl ObjectDomain {
 
     pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
+	    name: fn_name,
 	    objects,
 	}
     }
