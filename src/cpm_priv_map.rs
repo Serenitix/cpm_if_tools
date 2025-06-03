@@ -57,7 +57,7 @@ impl CPMPrivMapContainer {
 	    function_local_domain_map: HashMap::new(),
 	}
     }
-    pub fn add_global(&mut self, global_name: String, file: String, alias: String) {
+    pub fn add_global(&mut self, global_name: String, file: String, line: String, alias: String) {
 	// create new objectdomain for global
 	let domain = ObjectDomain::new_global(
 	    global_name.to_string(),
@@ -65,7 +65,7 @@ impl CPMPrivMapContainer {
 		ObjectID::new(
 		    AllocType::Global,
 		    file.to_string(),
-		    "".to_string(),
+		    line.to_string(),
 		    global_name.to_string(),
 		)
 	    ]
