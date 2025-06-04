@@ -166,9 +166,9 @@ impl CPMPrivMapContainer {
     }
 
 
-    pub fn get_all_domains_for_global(&self, name: &str, path: &str) -> Vec<String> {
+    pub fn get_all_domains_for_global(&self, global_name: &str) -> Vec<String> {
 	self.cpm_priv_map
-	    .get_object_domain_for_global(name, path) // lookup global's ObjectDomain
+	    .get_object_domain_for_global(global_name) // lookup global's ObjectDomain
 	    .map(|object_domain| // if sucessful
 		 self.domain_alias_map
 		 .get(object_domain.name()) // lookup corresponding aliases
@@ -232,8 +232,8 @@ impl CPMPrivMap {
 	self.privileges.push(privilege);
     }
 
-    pub fn get_object_domain_for_global(&self, name: &str, path: &str) -> Option<&ObjectDomain> {
-	self.object_map.iter().find(|od| od.find_object(Some(name), Some(path), None, None).is_some())
+    pub fn get_object_domain_for_global(&self, global_name: &str) -> Option<&ObjectDomain> {
+	self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
     }
 
     pub fn save_to_yaml(&self, file_path: &str) ->
