@@ -271,7 +271,7 @@ impl ObjectDomain {
 
     pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: fn_name,
+	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
 	    objects,
 	}
     }
