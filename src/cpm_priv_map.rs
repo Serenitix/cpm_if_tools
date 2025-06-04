@@ -501,7 +501,7 @@ impl SubjectDomain {
 
     pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
-	    name: next_domain_id("SubjectDomain".to_string(), Some(fn_name)),
+	    name: fn_name,
 	    subjects,
 	}
     }
