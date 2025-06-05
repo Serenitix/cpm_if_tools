@@ -57,7 +57,7 @@ impl CPMPrivMapContainer {
 	    function_local_domain_map: HashMap::new(),
 	}
     }
-    pub fn add_global(&mut self, global_name: String, file: String, alias: String) {
+    pub fn add_global(&mut self, global_name: String, file: String, line: String, alias: String) {
 	// create new objectdomain for global
 	let domain = ObjectDomain::new_global(
 	    global_name.to_string(),
@@ -65,7 +65,7 @@ impl CPMPrivMapContainer {
 		ObjectID::new(
 		    AllocType::Global,
 		    file.to_string(),
-		    "".to_string(),
+		    line.to_string(),
 		    global_name.to_string(),
 		)
 	    ]
@@ -93,7 +93,7 @@ impl CPMPrivMapContainer {
 	    self.update_alias_maps(alias.to_string(), locals_domain.name().to_string());
 	}
 
-	// add too function_local_domain_map
+	// add to function_local_domain_map
 	self.function_local_domain_map.insert((fn_name.to_string(), fn_path.to_string()),
 					      locals_domain.name().to_string());
 
@@ -166,9 +166,9 @@ impl CPMPrivMapContainer {
     }
 
 
-    pub fn get_all_domains_for_global(&self, name: &str, path: &str) -> Vec<String> {
+    pub fn get_all_domains_for_global(&self, global_name: &str) -> Vec<String> {
 	self.cpm_priv_map
-	    .get_object_domain_for_global(name, path) // lookup global's ObjectDomain
+	    .get_object_domain_for_global(global_name) // lookup global's ObjectDomain
 	    .map(|object_domain| // if sucessful
 		 self.domain_alias_map
 		 .get(object_domain.name()) // lookup corresponding aliases
@@ -232,8 +232,8 @@ impl CPMPrivMap {
 	self.privileges.push(privilege);
     }
 
-    pub fn get_object_domain_for_global(&self, name: &str, path: &str) -> Option<&ObjectDomain> {
-	self.object_map.iter().find(|od| od.find_object(Some(name), Some(path), None, None).is_some())
+    pub fn get_object_domain_for_global(&self, global_name: &str) -> Option<&ObjectDomain> {
+	self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
     }
 
     pub fn save_to_yaml(&self, file_path: &str) ->
@@ -501,7 +501,7 @@ impl SubjectDomain {
 
     pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
-	    name: next_domain_id("SubjectDomain".to_string(), Some(fn_name)),
+	    name: fn_name,
 	    subjects,
 	}
     }
