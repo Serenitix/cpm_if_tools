@@ -44,8 +44,6 @@ pub struct CPMPrivMapContainer {
     domain_alias_map: HashMap<String, HashSet<String>>,
     // map of the reverse: alias to set of domain names
     alias_domain_map: HashMap<String, HashSet<String>>,
-    // map of (path, fn name) -> name of locals/params domain
-    function_local_domain_map: HashMap<(String, String), String>,
 }
 
 impl CPMPrivMapContainer {
@@ -54,7 +52,6 @@ impl CPMPrivMapContainer {
 	    cpm_priv_map: CPMPrivMap::new(),
 	    domain_alias_map: HashMap::new(),
 	    alias_domain_map: HashMap::new(),
-	    function_local_domain_map: HashMap::new(),
 	}
     }
     pub fn add_global(&mut self, global_name: String, file: String, line: String, alias: String) {
@@ -78,27 +75,30 @@ impl CPMPrivMapContainer {
 	self.cpm_priv_map.add_object_domain(domain);
     }
 
-    pub fn get_fn_locals_alias_domain_names(&mut self, fn_name: String, fn_path: String) -> Vec<String> {
-	self.function_local_domain_map.get(&(fn_name, fn_path)) // lookup domain name corresponding to fn/path
-	    .map(|d| self.domain_alias_map.get(d) //if sucessful, lookup corresponding aliases (including locals/params)
-		 .unwrap_or(&HashSet::new()).iter().map(|s| s.to_string()).collect::<Vec<String>>()) // convert result to list
-	    .unwrap_or_default() // return empty list if fn/path domain lookup fails
-
+    pub fn lookup_aliased_domain_names(&mut self, aliases: &[String]) -> Vec<String> {
+        aliases
+            .iter()
+            .flat_map(|alias| {
+                // for each alias, lookup domain names for objects that share this alias
+                self.alias_domain_map.get(alias)
+                    .map_or(vec![],
+                            |res|
+                            res
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect())
+            })
+            .collect::<Vec<String>>() // collect into vector
     }
 
-    pub fn add_local(&mut self, fn_name: String, fn_path: String, locals_domain: ObjectDomain, aliases: &Vec<String>) {
+    pub fn add_object_domain(&mut self, domain: ObjectDomain, aliases: &[String]) {
 
 	// add domain to all corresponding alias map entries
 	for alias in aliases {
-	    self.update_alias_maps(alias.to_string(), locals_domain.name().to_string());
+	    self.update_alias_maps(alias.to_string(), domain.name().to_string());
 	}
-
-	// add to function_local_domain_map
-	self.function_local_domain_map.insert((fn_name.to_string(), fn_path.to_string()),
-					      locals_domain.name().to_string());
-
 	// add object domain to priv map
-	self.cpm_priv_map.add_object_domain(locals_domain);
+	self.cpm_priv_map.add_object_domain(domain);
     }
 
     pub fn add_alloc(&mut self, alloc_fn: String, file: String, line: String, aliases: &Vec<String>) {
@@ -269,9 +269,9 @@ impl ObjectDomain {
         Self { name, objects }
     }
 
-    pub fn new_local(fn_name: String, objects: Vec<ObjectID>) -> Self {
+    pub fn new_local(name: String, objects: Vec<ObjectID>) -> Self {
         Self {
-	    name: next_domain_id("ObjectDomain".to_string(), Some(fn_name)),
+	    name: next_domain_id("ObjectDomain".to_string(), Some(name)),
 	    objects,
 	}
     }
