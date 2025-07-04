@@ -94,13 +94,14 @@ pub struct ObjectDomain {
     name: String,
     //objects: Vec<String>,
     objects: Vec<ObjectID>,
+    sizes: Option<Vec<u32>>,
 }
 
 impl ObjectDomain {
 
-    pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
+    pub fn new(name: String, objects: Vec<ObjectID>, sizes: Option<Vec<u32>>) -> Self {
         // TODO: Add check for duplicate domain creation
-        Self { name, objects }
+        Self { name, objects, sizes }
     }
 
     pub fn add_object(&mut self, object: ObjectID) {
@@ -305,14 +306,16 @@ impl std::str::FromStr for AllocType {
 pub struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
+    sizes: Option<Vec<u32>>,
 }
 
 impl SubjectDomain {
 
-    pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
+    pub fn new(fn_name: String, subjects: Vec<String>, sizes: Option<Vec<u32>>) -> Self {
         Self {
 	    name: fn_name,
 	    subjects,
+            sizes,
 	}
     }
 
@@ -325,7 +328,7 @@ impl SubjectDomain {
     }
 
     pub fn new_empty(name: String) -> Self {
-        Self { name, subjects: vec![] }
+        Self { name, subjects: vec![] , sizes: Some(vec![]) }
     }
 
     pub fn name(&self) -> &str {
@@ -334,6 +337,9 @@ impl SubjectDomain {
 
     pub fn subjects(&self) -> &Vec<String> {
         &self.subjects
+    }
+    pub fn sizes(&self) -> &Option<Vec<u32>> {
+        &self.sizes
     }
 }
 
@@ -1084,11 +1090,13 @@ object_context:
                             "".to_string(),   // Default empty line number
                             "object2".to_string()
                         ),
-                    ]
+                    ],
+                    None,
                 )],
                 subject_map: vec![SubjectDomain {
                     name: "subject1".to_string(),
                     subjects: vec!["subject1".to_string(), "subject2".to_string()],
+                    sizes: None,
                 }],
                 privileges: vec![Privilege {
                     principal: Principal {
@@ -1155,6 +1163,7 @@ privileges:
                     "object1".to_string(),
                 ),
             ],
+           Some(vec![3]),
         ));
 
         // Save to a temporary file
