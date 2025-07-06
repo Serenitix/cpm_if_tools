@@ -151,9 +151,12 @@ impl ObjectDomain {
     pub fn objects(&self) -> &Vec<ObjectID> {
         &self.objects
     }
+    pub fn sizes(&self) -> &Option<Vec<u32>> {
+        &self.sizes
+    }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ObjectID {
     alloc_type: AllocType,
     path: String,
@@ -233,7 +236,7 @@ impl<'de> Deserialize<'de> for ObjectID {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Copy, Clone)]
 #[serde(rename_all = "UPPERCASE")] // Automatically convert to uppercase
 pub enum AllocType {
     Global,
