@@ -104,6 +104,9 @@ impl ObjectDomain {
         // TODO: Add check for duplicate domain creation
         Self { name, objects, sizes: None }
     }
+    pub fn new_with_sizes(name: String, objects: Vec<ObjectID>, sizes: Option<Vec<u32>>) -> Self {
+        Self { name, objects, sizes }
+    }
 
     pub fn add_object(&mut self, object: ObjectID) {
         self.objects.push(object);
@@ -324,6 +327,10 @@ impl SubjectDomain {
 	}
     }
 
+    pub fn new_with_sizes(name: String, subjects: Vec<String>, sizes: Option<Vec<u32>>) -> Self {
+        Self { name, subjects, sizes }
+    }
+
     pub fn add_subject(&mut self, subject: String) {
         self.subjects.push(subject);
     }
@@ -443,7 +450,7 @@ impl<'de> Deserialize<'de> for CallRetPrivField {
             fn visit_unit<E>(self) -> Result<Self::Value, E>
             where
                 E: de::Error,
-            {
+           {
                 // Handle explicitly empty fields (e.g., `can_call:`)
                 Ok(CallRetPrivField::All)
             }
@@ -1097,11 +1104,11 @@ object_context:
                         ),
                     ]
                 )],
-                subject_map: vec![SubjectDomain {
-                    name: "subject1".to_string(),
-                    subjects: vec!["subject1".to_string(), "subject2".to_string()],
-                    sizes: None,
-                }],
+                subject_map: vec![SubjectDomain::new_with_sizes(
+                    "subject1".to_string(),
+                    vec!["subject1".to_string(), "subject2".to_string()],
+                    None,
+                )],
                 privileges: vec![Privilege {
                     principal: Principal {
                         subject: "subject1".to_string(),
@@ -1158,9 +1165,9 @@ privileges:
         let mut cpm_pmap = CPMPrivMap::new();
 
         // Populate the CPMPrivMap with example data
-        cpm_pmap.object_map.push(ObjectDomain {
-            name: "hi".to_string(),
-            objects: vec![
+        cpm_pmap.object_map.push(ObjectDomain::new_with_sizes(
+            "hi".to_string(),
+            vec![
                 ObjectID::new(
                     AllocType::Global,
                     "/path/to/file".to_string(),
@@ -1168,8 +1175,8 @@ privileges:
                     "object1".to_string(),
                 ),
             ],
-            sizes: Some(vec![3]),
-        });
+            Some(vec![3]),
+        ));
 
         // Save to a temporary file
         let file_path = "test_output.yaml";
