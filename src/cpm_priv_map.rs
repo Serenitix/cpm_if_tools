@@ -94,14 +94,15 @@ pub struct ObjectDomain {
     name: String,
     //objects: Vec<String>,
     objects: Vec<ObjectID>,
+    #[serde(default)]
     sizes: Option<Vec<u32>>,
 }
 
 impl ObjectDomain {
 
-    pub fn new(name: String, objects: Vec<ObjectID>, sizes: Option<Vec<u32>>) -> Self {
+    pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
         // TODO: Add check for duplicate domain creation
-        Self { name, objects, sizes }
+        Self { name, objects, sizes: None }
     }
 
     pub fn add_object(&mut self, object: ObjectID) {
@@ -309,16 +310,17 @@ impl std::str::FromStr for AllocType {
 pub struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
+    #[serde(default)]
     sizes: Option<Vec<u32>>,
 }
 
 impl SubjectDomain {
 
-    pub fn new(fn_name: String, subjects: Vec<String>, sizes: Option<Vec<u32>>) -> Self {
+    pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
 	    name: fn_name,
 	    subjects,
-            sizes,
+            sizes: None,
 	}
     }
 
@@ -1093,8 +1095,7 @@ object_context:
                             "".to_string(),   // Default empty line number
                             "object2".to_string()
                         ),
-                    ],
-                    None,
+                    ]
                 )],
                 subject_map: vec![SubjectDomain {
                     name: "subject1".to_string(),
@@ -1157,8 +1158,9 @@ privileges:
         let mut cpm_pmap = CPMPrivMap::new();
 
         // Populate the CPMPrivMap with example data
-        cpm_pmap.object_map.push(ObjectDomain::new( "hi".to_string(),
-            vec![
+        cpm_pmap.object_map.push(ObjectDomain {
+            name: "hi".to_string(),
+            objects: vec![
                 ObjectID::new(
                     AllocType::Global,
                     "/path/to/file".to_string(),
@@ -1166,8 +1168,8 @@ privileges:
                     "object1".to_string(),
                 ),
             ],
-           Some(vec![3]),
-        ));
+            sizes: Some(vec![3]),
+        });
 
         // Save to a temporary file
         let file_path = "test_output.yaml";
