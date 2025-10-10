@@ -64,11 +64,11 @@ impl CPMPrivMap {
         &self.privileges
     }
     pub fn add_privilege(&mut self, privilege: Privilege) {
-	self.privileges.push(privilege);
+        self.privileges.push(privilege);
     }
 
     pub fn get_object_domain_for_global(&self, global_name: &str) -> Option<&ObjectDomain> {
-	self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
+        self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
     }
 
     pub fn save_to_yaml(&self, file_path: &str) ->
@@ -136,17 +136,17 @@ impl ObjectDomain {
         self.objects.iter().find(|o| o.alloc_type == *alloc_type)
     }
     pub fn find_object(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>) -> Option<&ObjectID> {
-	self.filter_objects(name, path, lineno, alloc_type)
-	    .into_iter()
-	    .next()
+        self.filter_objects(name, path, lineno, alloc_type)
+            .into_iter()
+            .next()
     }
     pub fn filter_objects(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>)-> Vec<&ObjectID> {
-	self.objects.iter().filter(|&o| {
-	    (name.is_none_or(|name| o.name == name)) &&
-		(path.is_none_or(|path| o.path == path)) &&
-		(lineno.is_none_or(|lineno| o.lineno == lineno)) &&
-		(alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
-	}).collect()
+        self.objects.iter().filter(|&o| {
+            (name.is_none_or(|name| o.name == name)) &&
+                (path.is_none_or(|path| o.path == path)) &&
+                (lineno.is_none_or(|lineno| o.lineno == lineno)) &&
+                (alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
+        }).collect()
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -194,7 +194,22 @@ impl ObjectID {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    pub fn name_base(&self) -> &str {
+        match self.name.split_once('.') {
+            None => &self.name,
+            Some((part, _)) => &part,
+        }
+    }
+    pub fn sub_objects(&self) -> std::str::Split<'_, char>{
+        let mut parts = self.name.split('.');
+        // drop first part
+        parts.next();
+        // return rest
+        parts
+    }
 }
+
 
 // Grammar: "<alloc_type>|<path>|<lineno>|<name>"
 impl Serialize for ObjectID {
@@ -321,10 +336,10 @@ impl SubjectDomain {
 
     pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
-	    name: fn_name,
-	    subjects,
+            name: fn_name,
+            subjects,
             sizes: None,
-	}
+        }
     }
 
     pub fn new_with_sizes(name: String, subjects: Vec<String>, sizes: Option<Vec<u32>>) -> Self {
@@ -485,16 +500,16 @@ pub enum RWPrivField {
 
 impl RWPrivField {
     pub fn add_object(&mut self, object: Object) {
-	match self {
-	    RWPrivField::List(ref mut list) => list.push(object),
-	    RWPrivField::All => () // technically object is already included in All
-	}
+        match self {
+            RWPrivField::List(ref mut list) => list.push(object),
+            RWPrivField::All => () // technically object is already included in All
+        }
     }
     pub fn contains_domain(&self, domain: &str) -> bool {
-	match self {
-	    RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
-	    RWPrivField::All => true,
-	}
+        match self {
+            RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
+            RWPrivField::All => true,
+        }
     }
 }
 
@@ -808,16 +823,16 @@ pub struct Object {
 
 impl Object {
     pub fn new(objs: Vec<String>) -> Self {
-	Self {
-	    objects: objs,
-	    object_context: default_context_field(),
-	}
+        Self {
+            objects: objs,
+            object_context: default_context_field(),
+        }
     }
     pub fn new_empty_from_domain_name(name: String) -> Self {
-	Self {
-	    objects: vec![name],
-	    object_context: ContextField::All,
-	}
+        Self {
+            objects: vec![name],
+            object_context: ContextField::All,
+        }
     }
     pub fn objects(&self) -> &Vec<String> {
         &self.objects
