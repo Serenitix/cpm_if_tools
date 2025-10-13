@@ -255,6 +255,13 @@ impl<'de> Deserialize<'de> for ObjectID {
     }
 }
 
+impl fmt::Display for ObjectID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}",
+               serde_json::to_string(&self).unwrap().trim().replace("\"", ""))
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, Copy, Clone)]
 #[serde(rename_all = "UPPERCASE")] // Automatically convert to uppercase
 pub enum AllocType {
