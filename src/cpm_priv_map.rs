@@ -203,7 +203,7 @@ impl ObjectID {
     }
     pub fn sub_objects(&self) -> std::str::Split<'_, char>{
         let mut parts = self.name.split('.');
-        // drop first part
+        // drop first part (which is the fn name)
         parts.next();
         // return rest
         parts
@@ -262,7 +262,7 @@ impl fmt::Display for ObjectID {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Copy, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Copy, Clone, Eq, Hash)]
 #[serde(rename_all = "UPPERCASE")] // Automatically convert to uppercase
 pub enum AllocType {
     Global,
