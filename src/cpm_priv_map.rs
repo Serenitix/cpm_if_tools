@@ -64,11 +64,11 @@ impl CPMPrivMap {
         &self.privileges
     }
     pub fn add_privilege(&mut self, privilege: Privilege) {
-	self.privileges.push(privilege);
+        self.privileges.push(privilege);
     }
 
     pub fn get_object_domain_for_global(&self, global_name: &str) -> Option<&ObjectDomain> {
-	self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
+        self.object_map.iter().find(|od| od.find_object(Some(global_name), None, None, Some(&AllocType::Global)).is_some())
     }
 
     pub fn save_to_yaml(&self, file_path: &str) ->
@@ -94,13 +94,18 @@ pub struct ObjectDomain {
     name: String,
     //objects: Vec<String>,
     objects: Vec<ObjectID>,
+    #[serde(default)]
+    sizes: Option<Vec<u32>>,
 }
 
 impl ObjectDomain {
 
     pub fn new(name: String, objects: Vec<ObjectID>) -> Self {
         // TODO: Add check for duplicate domain creation
-        Self { name, objects }
+        Self { name, objects, sizes: None }
+    }
+    pub fn new_with_sizes(name: String, objects: Vec<ObjectID>, sizes: Option<Vec<u32>>) -> Self {
+        Self { name, objects, sizes }
     }
 
     pub fn add_object(&mut self, object: ObjectID) {
@@ -131,17 +136,17 @@ impl ObjectDomain {
         self.objects.iter().find(|o| o.alloc_type == *alloc_type)
     }
     pub fn find_object(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>) -> Option<&ObjectID> {
-	self.filter_objects(name, path, lineno, alloc_type)
-	    .into_iter()
-	    .next()
+        self.filter_objects(name, path, lineno, alloc_type)
+            .into_iter()
+            .next()
     }
     pub fn filter_objects(&self, name: Option<&str>, path: Option<&str>, lineno: Option<&str>, alloc_type: Option<&AllocType>)-> Vec<&ObjectID> {
-	self.objects.iter().filter(|&o| {
-	    (name.is_none_or(|name| o.name == name)) &&
-		(path.is_none_or(|path| o.path == path)) &&
-		(lineno.is_none_or(|lineno| o.lineno == lineno)) &&
-		(alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
-	}).collect()
+        self.objects.iter().filter(|&o| {
+            (name.is_none_or(|name| o.name == name)) &&
+                (path.is_none_or(|path| o.path == path)) &&
+                (lineno.is_none_or(|lineno| o.lineno == lineno)) &&
+                (alloc_type.is_none_or(|alloc_type| o.alloc_type == *alloc_type))
+        }).collect()
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -150,9 +155,12 @@ impl ObjectDomain {
     pub fn objects(&self) -> &Vec<ObjectID> {
         &self.objects
     }
+    pub fn sizes(&self) -> &Option<Vec<u32>> {
+        &self.sizes
+    }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ObjectID {
     alloc_type: AllocType,
     path: String,
@@ -186,7 +194,22 @@ impl ObjectID {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    pub fn name_base(&self) -> &str {
+        match self.name.split_once('.') {
+            None => &self.name,
+            Some((part, _)) => &part,
+        }
+    }
+    pub fn sub_objects(&self) -> std::str::Split<'_, char>{
+        let mut parts = self.name.split('.');
+        // drop first part (which is the fn name)
+        parts.next();
+        // return rest
+        parts
+    }
 }
+
 
 // Grammar: "<alloc_type>|<path>|<lineno>|<name>"
 impl Serialize for ObjectID {
@@ -232,7 +255,14 @@ impl<'de> Deserialize<'de> for ObjectID {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+impl fmt::Display for ObjectID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}",
+               serde_json::to_string(&self).unwrap().trim().replace("\"", ""))
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Copy, Clone, Eq, Hash)]
 #[serde(rename_all = "UPPERCASE")] // Automatically convert to uppercase
 pub enum AllocType {
     Global,
@@ -305,15 +335,22 @@ impl std::str::FromStr for AllocType {
 pub struct SubjectDomain {
     name: String,
     subjects: Vec<String>,
+    #[serde(default)]
+    sizes: Option<Vec<u32>>,
 }
 
 impl SubjectDomain {
 
     pub fn new(fn_name: String, subjects: Vec<String>) -> Self {
         Self {
-	    name: fn_name,
-	    subjects,
-	}
+            name: fn_name,
+            subjects,
+            sizes: None,
+        }
+    }
+
+    pub fn new_with_sizes(name: String, subjects: Vec<String>, sizes: Option<Vec<u32>>) -> Self {
+        Self { name, subjects, sizes }
     }
 
     pub fn add_subject(&mut self, subject: String) {
@@ -325,7 +362,7 @@ impl SubjectDomain {
     }
 
     pub fn new_empty(name: String) -> Self {
-        Self { name, subjects: vec![] }
+        Self { name, subjects: vec![] , sizes: Some(vec![]) }
     }
 
     pub fn name(&self) -> &str {
@@ -334,6 +371,9 @@ impl SubjectDomain {
 
     pub fn subjects(&self) -> &Vec<String> {
         &self.subjects
+    }
+    pub fn sizes(&self) -> &Option<Vec<u32>> {
+        &self.sizes
     }
 }
 
@@ -432,7 +472,7 @@ impl<'de> Deserialize<'de> for CallRetPrivField {
             fn visit_unit<E>(self) -> Result<Self::Value, E>
             where
                 E: de::Error,
-            {
+           {
                 // Handle explicitly empty fields (e.g., `can_call:`)
                 Ok(CallRetPrivField::All)
             }
@@ -467,16 +507,16 @@ pub enum RWPrivField {
 
 impl RWPrivField {
     pub fn add_object(&mut self, object: Object) {
-	match self {
-	    RWPrivField::List(ref mut list) => list.push(object),
-	    RWPrivField::All => () // technically object is already included in All
-	}
+        match self {
+            RWPrivField::List(ref mut list) => list.push(object),
+            RWPrivField::All => () // technically object is already included in All
+        }
     }
     pub fn contains_domain(&self, domain: &str) -> bool {
-	match self {
-	    RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
-	    RWPrivField::All => true,
-	}
+        match self {
+            RWPrivField::List(ref list) => list.iter().any(|o| o.objects().iter().any(|obj| obj == domain)),
+            RWPrivField::All => true,
+        }
     }
 }
 
@@ -790,16 +830,16 @@ pub struct Object {
 
 impl Object {
     pub fn new(objs: Vec<String>) -> Self {
-	Self {
-	    objects: objs,
-	    object_context: default_context_field(),
-	}
+        Self {
+            objects: objs,
+            object_context: default_context_field(),
+        }
     }
     pub fn new_empty_from_domain_name(name: String) -> Self {
-	Self {
-	    objects: vec![name],
-	    object_context: ContextField::All,
-	}
+        Self {
+            objects: vec![name],
+            object_context: ContextField::All,
+        }
     }
     pub fn objects(&self) -> &Vec<String> {
         &self.objects
@@ -1086,10 +1126,11 @@ object_context:
                         ),
                     ]
                 )],
-                subject_map: vec![SubjectDomain {
-                    name: "subject1".to_string(),
-                    subjects: vec!["subject1".to_string(), "subject2".to_string()],
-                }],
+                subject_map: vec![SubjectDomain::new_with_sizes(
+                    "subject1".to_string(),
+                    vec!["subject1".to_string(), "subject2".to_string()],
+                    None,
+                )],
                 privileges: vec![Privilege {
                     principal: Principal {
                         subject: "subject1".to_string(),
@@ -1146,7 +1187,8 @@ privileges:
         let mut cpm_pmap = CPMPrivMap::new();
 
         // Populate the CPMPrivMap with example data
-        cpm_pmap.object_map.push(ObjectDomain::new( "hi".to_string(),
+        cpm_pmap.object_map.push(ObjectDomain::new_with_sizes(
+            "hi".to_string(),
             vec![
                 ObjectID::new(
                     AllocType::Global,
@@ -1155,6 +1197,7 @@ privileges:
                     "object1".to_string(),
                 ),
             ],
+            Some(vec![3]),
         ));
 
         // Save to a temporary file
