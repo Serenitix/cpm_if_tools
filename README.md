@@ -1,11 +1,15 @@
-# CPM Schema Validator
+# CPM Interchange Format Tools
 
 ## Overview
-The **CPM Schema Validator** is a Rust-based tool designed to validate CPM policies as presented in YAML files against a **Compartmentalization Policy Model (CPM) schema**. This ensures that input files conform to the expected format and structure.
 
-In addition to the command-line tool, this project provides a library that implements a custom definition of deep specification of the grammar, going beyond the syntax-only validation provided by the schema validator.
+The **CPM IF Tools** repository includes several utilities aimed at supporting the DARPA CPM program to provide a reference implementation for validation, analysis, and translation for the CPM based privilege metadata format.
+
+The **CPM Validator** is a Rust-based tool designed to validate CPM policies as presented in YAML files against a **Compartmentalization Policy Model (CPM) schema**. This ensures that input files conform to the expected format and structure.
+
+In addition to the command-line tool, this project provides a library that implements a custom definition of deep specification of the grammar, going beyond the syntax-only validation provided by the schema validator. Integrating into the validator is on the roadmap.
 
 ## Features
+
 - Validates YAML data against the **CPM schema**.
 - Provides a library for advanced grammar validation and manipulation.
 - Includes **comprehensive unit tests** to verify correctness.
